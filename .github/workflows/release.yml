@@ -1,0 +1,98 @@
+name: Signed Android Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Require protected signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_B64"
+          test -n "$KEYSTORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Decode signing key outside the checkout
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/noblex-release.jks"
+          chmod 600 "$RUNNER_TEMP/noblex-release.jks"
+      - name: Test and build signed release
+        env:
+          NOBLEX_KEYSTORE_PATH: ${{ runner.temp }}/noblex-release.jks
+          NOBLEX_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          NOBLEX_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          NOBLEX_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ./gradlew --no-daemon testDebugUnitTest lint assembleRelease \
+            -PversionName="$VERSION" -PversionCode="$GITHUB_RUN_NUMBER"
+      - name: Verify signature and create release manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$APK"
+          SHA256="$(sha256sum "$APK" | cut -d ' ' -f 1)"
+          VERSION="${GITHUB_REF_NAME#v}"
+          python3 - "$VERSION" "$GITHUB_RUN_NUMBER" "$SHA256" "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" <<'PY'
+          import json
+          import re
+          import sys
+          from datetime import datetime, timezone
+
+          version, version_code, checksum, repository, tag = sys.argv[1:]
+          if not re.fullmatch(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?", version):
+              raise SystemExit("Tag must use semantic versioning, optionally with a prerelease suffix.")
+          with open("CHANGELOG.md", encoding="utf-8") as changelog:
+              notes = changelog.read()
+          manifest = {
+              "applicationId": "io.github.alandi123.noblexlauncher",
+              "version": version,
+              "versionCode": int(version_code),
+              "minSdk": 28,
+              "supportedAbis": ["universal"],
+              "apkUrl": f"https://github.com/{repository}/releases/download/{tag}/app-release.apk",
+              "sha256": checksum,
+              "releaseDate": datetime.now(timezone.utc).isoformat(),
+              "releaseNotes": notes,
+              "mandatory": False,
+          }
+          with open("update-manifest.json", "w", encoding="utf-8") as output:
+              json.dump(manifest, output, ensure_ascii=False, indent=2)
+          PY
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_ARGS=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" "${RELEASE_ARGS[@]}" \
+            --title "NOBLEX LAUNCHER ${GITHUB_REF_NAME#v}" \
+            --notes-file CHANGELOG.md \
+            app/build/outputs/apk/release/app-release.apk \
+            update-manifest.json
