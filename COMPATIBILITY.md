@@ -2,22 +2,26 @@
 
 ## Objetivos
 
-- Android TV/Google TV con Android 9 (API 28) o posterior.
-- Prueba primaria: Noblex / Changhong AI PONT, Android 11 (API 30), ARMv7, 1920×1080.
-- No se usan bibliotecas nativas de terceros; el APK debería poder ejecutarse en ARMv7, ARM64 y otras ABI compatibles con Android.
+- Android TV/Google TV con Android 9 (API 28) o posterior; target SDK 30.
+- Prueba primaria: Noblex / Changhong AI PONT, Android 11 (API 30), ARMv7, 1920×1080 (densidad 320 dpi, RAM reducida).
+- Sin bibliotecas nativas propias.
 
-## Verificado en el Noblex conectado
+## Verificado en el Noblex conectado (0.2.0-rc.1 debug)
 
-- Reporta API 30, Android 11 y ABI `armeabi-v7a`.
-- Resolución física reportada por `wm size`: 1920×1080; densidad: 320 dpi.
-- Configuración low-RAM habilitada.
-- `TvInputManager` informa entradas HDMI, compuesto y sintonizador.
-- La app de TV MediaTek tiene actividad de inicio visible para Android.
+- Instalación, arranque, foco DPAD, apertura de una app y regreso con HOME.
+- Fondo persistente tras `force-stop`; Google TV sigue siendo HOME (`scripts/check_rollback.sh`).
+- Memoria: ≈80 MB de PSS en el proceso del launcher con el fondo cargado.
 
-La pantalla de 3840×2160 descrita por otra propiedad aún requiere contrastar con captura de pantalla y dimensiones de ventana antes de fijar decisiones de diseño.
+## Entradas de TV y cambio de HDMI
+
+Investigación de solo lectura (sin modificar paquetes):
+
+- Plataforma MediaTek (`m7322`). `com.mediatek.tvinput` publica entradas TIF estándar: HDMI HW4–HW7 (conectadas/en espera), compuesto HW1 (desconectado) y sintonizadores HW0/HW8.
+- `com.mediatek.wwtv.tvcenter` (LiveTV, app del sistema) atiende `ACTION_VIEW` sobre `content://android.media.tv/passthrough/<id>`.
+- **Verificado por estado del sistema:** lanzar esa intención desde `am start` abrió TurnkeyUi y `dumpsys tv_input` mostró una sesión activa en la entrada HW5 (HDMI); HOME volvió a Google TV.
+- **No verificado visualmente:** las capturas de vídeo HDMI están protegidas (salen vacías), por lo que falta confirmar con una fuente real conectada que se ve la señal. Mientras tanto la función está implementada con la API pública `TvContract` y se considera *implementada, pendiente de confirmación visual en el TV*.
+- No se usan APIs ocultas, `INJECT_EVENTS`, `HdmiControlManager` privado ni apps del fabricante modificadas.
 
 ## Limitaciones
 
-Una aplicación normal puede descubrir entradas públicas de `TvInputManager`, pero no se presume que pueda cambiar globalmente HDMI. La app muestra el estado detectado y ofrece abrir la app de TV instalada. No se invocan APIs ocultas ni comandos del fabricante no verificados.
-
-Los demás dispositivos Android TV, Google TV, resoluciones, proveedores de TV y ABI son objetivos no certificados hasta probarlos.
+Otros dispositivos Android TV, Google TV, resoluciones y ABI son objetivos no certificados hasta probarlos. El comportamiento del selector HOME depende del fabricante; el launcher no se ha establecido como HOME.

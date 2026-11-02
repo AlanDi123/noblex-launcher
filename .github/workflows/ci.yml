@@ -22,7 +22,7 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Test, lint, and build
-        run: ./gradlew --no-daemon testDebugUnitTest lint assembleDebug
+        run: ./gradlew --no-daemon testDebugUnitTest lint assembleDebug assembleRelease
       - uses: actions/upload-artifact@v4
         with:
           name: noblex-launcher-debug

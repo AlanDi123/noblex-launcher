@@ -28,7 +28,9 @@
         <activity
             android:name=".LauncherActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
@@ -37,14 +39,8 @@
             </intent-filter>
         </activity>
 
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.updates"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/update_paths" />
-        </provider>
+        <receiver
+            android:name=".InstallStatusReceiver"
+            android:exported="false" />
     </application>
 </manifest>

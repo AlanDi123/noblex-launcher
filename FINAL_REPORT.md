@@ -1,25 +1,32 @@
-# Informe final — NOBLEX LAUNCHER
+# Informe final — NOBLEX LAUNCHER 0.2.0-rc.1 (candidato de release, no publicado)
 
-## Entregado
+## Entregado en la fase 2
 
-- Proyecto Android Kotlin con identidad de producción fija `io.github.alandi123.noblexlauncher` y variante de depuración separada.
-- Launcher para Android TV con catálogo dinámico, categorías, favoritos, opciones de organización, reloj, fondo local con atribución y consulta de entradas TV mediante APIs públicas.
-- Comprobación de actualizaciones y flujo PackageInstaller preparado para releases firmados.
-- CI, workflow de publicación, documentación en español, instrucciones de rollback y scripts de procesamiento de wallpaper.
-- Código publicado en el repositorio público [AlanDi123/noblex-launcher](https://github.com/AlanDi123/noblex-launcher).
+- Auditoría completa y corrección por severidad: ver `RELEASE_READINESS.md`.
+- Interfaz: carcasa persistente con foco conservado, fondo legible y ligero, tarjetas 212×160 dp, diálogos oscuros, categorías editables.
+- Funciones: descubrimiento dinámico en segundo plano, favoritos, orden, categorías (crear/renombrar/eliminar), ocultas, recientes, fondo y atenuación, reloj, entradas TV.
+- Actualizador reforzado (SemVer, versionCode creciente, applicationId, tamaño, SHA-256, URL oficial, redirecciones acotadas, `.part`, firma y paquete del APK, PackageInstaller, limpieza de caché). Ver `UPDATES.md`.
+- Firma: procedimiento en `SIGNING.md`; `scripts/verify_apk.sh` y `scripts/make_update_manifest.py`. Workflow de release endurecido y no ejecutado.
 
-## Validación local y en el dispositivo
+## Verificación realizada
 
-- `testDebugUnitTest`: 3 pruebas aprobadas.
-- `assembleDebug`: completado correctamente. `lintDebug`: completado correctamente; permanecen avisos no bloqueantes de banner vectorial y versiones de dependencias.
-- APK verificado como `io.github.alandi123.noblexlauncher.debug`, min SDK 28 y target SDK 30.
-- Instalado y abierto en Android TV 11/API 30. La captura confirma 1920×1080; se probaron el foco DPAD, menú contextual y apertura de una aplicación descubierta.
-- `scripts/check_rollback.sh` confirmó que Google TV permanece habilitado y es el HOME actual.
-- El primer CI falló en la configuración del SDK porque Android setup v3 intentó instalar un paquete obsoleto. Tras actualizar ambos workflows a v4.0.4, las dos ejecuciones posteriores completaron correctamente pruebas, lint, build y carga del APK de depuración.
+- `testDebugUnitTest`: 20 pruebas, 0 fallos. `lintDebug` y `assembleDebug`: correctos (avisos no bloqueantes).
+- `assembleRelease` con R8, firmado con una clave **desechable** (ya eliminada): compila; `apksigner verify` correcto (esquema v2); `aapt2 dump badging`: paquete `io.github.alandi123.noblexlauncher`, `0.2.0-rc.1`, versionCode 20067 (coincide con la fórmula), min SDK 28, target 30. `verify_apk.sh` rechaza una huella distinta (código 2). `make_update_manifest.py` generó un manifiesto coherente (no publicado).
+- En el TV (debug): instalación, captura 1920×1080 inspeccionada, DPAD, abrir una app y volver, HOME → Google TV, fondo persistente tras `force-stop`, PSS ≈80 MB.
+- `scripts/check_rollback.sh`/consulta de HOME: Google TV sigue siendo HOME y está habilitado.
+- Entradas: el intent `TvContract` abrió TurnkeyUi con sesión activa en HDMI HW5 según `dumpsys tv_input`; **no** hay confirmación visual (captura de vídeo protegida).
 
-## Pendiente antes de publicar o activar
+## No verificado
 
-- No existe una clave permanente de release con copia de seguridad verificada. Antes de publicar un APK estable, crea esa clave, guarda una copia segura fuera del repositorio y configura los secretos `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD` en GitHub Actions.
-- NOBLEX LAUNCHER no se seleccionó como HOME. Google TV continúa como opción de recuperación y HOME predeterminado.
+- Cambio de entrada con señal real (solo estado del sistema).
+- Flujo completo del actualizador contra un release real (no existe ninguno; sin release falso).
+- TalkBack y dispositivos distintos al Noblex.
+- Los workflows de release y CI modificados se ejecutan por primera vez al publicar/empujar.
 
-Por estas limitaciones, no se afirma que exista un release firmado, una actualización disponible ni activación permanente del launcher.
+## Requisitos pendientes
+
+1. Crear y respaldar la clave permanente (`SIGNING.md`).
+2. Configurar `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` y la variable `RELEASE_CERT_SHA256`.
+3. Crear un tag pre-release `v0.2.x-rc.N` y ejecutar el plan de `UPDATES.md`.
+4. Confirmar visualmente el cambio HDMI.
+5. Decidir cuándo establecer NOBLEX LAUNCHER como HOME (no se ha cambiado; Google TV intacto).

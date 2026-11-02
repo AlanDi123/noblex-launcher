@@ -2,31 +2,29 @@ package io.github.alandi123.noblexlauncher
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 
 class AppDiscovery(private val context: Context) {
-    @Suppress("DEPRECATION")
+    /** Safe to call from a background thread. Prefers the TV (leanback) entry of each package. */
     fun discover(): List<LaunchableApp> {
         val packageManager = context.packageManager
-        val activities = sequenceOf(
-            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER),
-            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
-        ).flatMap { intent ->
-            packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY).asSequence()
-        }
-
-        return activities
-            .filter { it.activityInfo.packageName != context.packageName }
-            .distinctBy { it.activityInfo.packageName }
-            .map { result ->
-                LaunchableApp(
-                    packageName = result.activityInfo.packageName,
-                    activityName = result.activityInfo.name,
+        val seen = HashSet<String>()
+        val results = ArrayList<LaunchableApp>()
+        listOf(Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER).forEach { category ->
+            val query = Intent(Intent.ACTION_MAIN).addCategory(category)
+            val activities: List<ResolveInfo> = packageManager.queryIntentActivities(query, 0)
+            activities.forEach { result ->
+                val info = result.activityInfo
+                if (info.packageName == context.packageName || !seen.add(info.packageName)) return@forEach
+                results += LaunchableApp(
+                    packageName = info.packageName,
+                    activityName = info.name,
                     label = result.loadLabel(packageManager).toString(),
                     icon = result.loadIcon(packageManager),
+                    banner = if (category == Intent.CATEGORY_LEANBACK_LAUNCHER) info.loadBanner(packageManager) else null,
                 )
             }
-            .sortedBy { it.label.lowercase() }
-            .toList()
+        }
+        return results.sortedBy { it.label.lowercase() }
     }
 }

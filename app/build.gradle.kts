@@ -3,6 +3,19 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// versionCode is always derived from versionName (MAJOR*10000+MINOR*100+PATCH, times 100, plus a
+// pre-release slot: alpha.N=N, beta.N=33+N, rc.N=66+N, stable=99). Keep in sync with SemanticVersion.kt.
+fun deriveVersionCode(name: String): Int {
+    val match = Regex("""(0|[1-9]\d?)\.(0|[1-9]\d?)\.(0|[1-9]\d?)(?:-(alpha|beta|rc)\.([1-9]\d?))?""").matchEntire(name)
+        ?: throw GradleException("versionName '$name' must be MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-(alpha|beta|rc).N")
+    val (major, minor, patch, kind, number) = match.destructured
+    if (kind.isNotEmpty() && number.toInt() > 32) throw GradleException("pre-release number must be 1..32")
+    val slot = if (kind.isEmpty()) 99 else listOf("alpha", "beta", "rc").indexOf(kind) * 33 + number.toInt()
+    return ((major.toInt() * 10_000 + minor.toInt() * 100 + patch.toInt()) * 100) + slot
+}
+
+val releaseVersionName = providers.gradleProperty("versionName").getOrElse("0.2.0-rc.1")
+
 android {
     namespace = "io.github.alandi123.noblexlauncher"
     compileSdk = 35
@@ -11,9 +24,8 @@ android {
         applicationId = "io.github.alandi123.noblexlauncher"
         minSdk = 28
         targetSdk = 30
-        versionCode = providers.gradleProperty("versionCode").getOrElse("1").toInt()
-        versionName = providers.gradleProperty("versionName").getOrElse("0.1.0")
-        testInstrumentationRunner = "android.test.InstrumentationTestRunner"
+        versionCode = deriveVersionCode(releaseVersionName)
+        versionName = releaseVersionName
     }
 
     val signingPath = providers.environmentVariable("NOBLEX_KEYSTORE_PATH").orNull

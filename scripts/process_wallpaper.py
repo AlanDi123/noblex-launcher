@@ -16,12 +16,12 @@ def main() -> None:
 
     image = Image.open(args.source).convert("RGB")
     image = ImageOps.fit(image, (1920, 1080), method=Image.Resampling.LANCZOS, centering=(0.5, 0.52))
-    image = ImageEnhance.Brightness(image).enhance(0.82)
-    image = ImageEnhance.Color(image).enhance(0.88)
-
+    # Lift the very dark source so the landscape stays visible; the app adds its own scrims.
+    image = ImageEnhance.Brightness(image).enhance(1.9)
+    image = ImageEnhance.Contrast(image).enhance(1.08)
+    image = ImageEnhance.Color(image).enhance(1.0)
     blue_green = Image.new("RGB", image.size, (14, 30, 34))
-    image = Image.blend(image, blue_green, 0.10)
-    image = Image.blend(image, Image.new("RGB", image.size, (0, 0, 0)), 0.34)
+    image = Image.blend(image, blue_green, 0.06)
 
     if args.preview:
         args.preview.parent.mkdir(parents=True, exist_ok=True)

@@ -4,6 +4,9 @@ import org.json.JSONObject
 import java.io.IOException
 
 object UpdateManifestParser {
+    private const val MAX_NOTES_LENGTH = 4_000
+    private val SHA256 = Regex("[0-9a-f]{64}")
+
     fun parse(
         manifest: JSONObject,
         releaseTag: String,
@@ -16,9 +19,14 @@ object UpdateManifestParser {
         }
 
         val version = manifest.getString("version")
-        val versionCode = manifest.getLong("versionCode")
-        if (version != releaseTag.removePrefix("v") || versionCode <= 0L) {
+        val semantic = SemanticVersion.parse(version)
+            ?: throw IOException("La versión del manifiesto no cumple el formato semántico.")
+        if (releaseTag != "v$version") {
             throw IOException("La versión del manifiesto no coincide con la publicación.")
+        }
+        val versionCode = manifest.getLong("versionCode")
+        if (versionCode != semantic.toVersionCode()) {
+            throw IOException("El versionCode del manifiesto no corresponde a la versión.")
         }
 
         val minSdk = manifest.getInt("minSdk")
@@ -34,10 +42,16 @@ object UpdateManifestParser {
         }
 
         val apkUrl = manifest.getString("apkUrl")
-        requireReleaseUrl(apkUrl, releaseTag, ".apk")
+        if (!ReleaseUrlPolicy.isOfficialAsset(apkUrl, releaseTag, ReleaseUrlPolicy.apkFileName(version))) {
+            throw IOException("La URL del APK no pertenece a la publicación oficial.")
+        }
         val checksum = manifest.getString("sha256").lowercase()
-        if (!checksum.matches(Regex("[0-9a-f]{64}"))) {
+        if (!SHA256.matches(checksum)) {
             throw IOException("El checksum publicado no es SHA-256 válido.")
+        }
+        val sizeBytes = manifest.getLong("sizeBytes")
+        if (sizeBytes <= 0L || sizeBytes > UpdatePolicy.MAX_APK_BYTES) {
+            throw IOException("El tamaño publicado del APK no es válido.")
         }
 
         return LauncherRelease(
@@ -46,17 +60,11 @@ object UpdateManifestParser {
             minSdk = minSdk,
             apkUrl = apkUrl,
             sha256 = checksum,
+            sizeBytes = sizeBytes,
             releaseDate = manifest.optString("releaseDate"),
-            releaseNotes = manifest.optString("releaseNotes"),
+            releaseNotes = manifest.optString("releaseNotes").take(MAX_NOTES_LENGTH),
             mandatory = manifest.optBoolean("mandatory", false),
             supportedAbis = supportedAbis,
         )
-    }
-
-    private fun requireReleaseUrl(address: String, tag: String, suffix: String) {
-        val expected = "https://github.com/AlanDi123/noblex-launcher/releases/download/$tag/"
-        if (!address.startsWith(expected) || !address.endsWith(suffix)) {
-            throw IOException("La URL del artefacto no pertenece a la publicación esperada.")
-        }
     }
 }

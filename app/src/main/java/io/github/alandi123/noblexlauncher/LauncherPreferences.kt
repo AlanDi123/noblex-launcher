@@ -36,12 +36,35 @@ class LauncherPreferences(context: Context) {
         return (CATEGORIES + custom).distinct()
     }
 
-    fun addCategory(category: String) {
-        val normalized = category.trim().take(MAX_CATEGORY_LENGTH)
-        if (normalized.isEmpty() || normalized in categories()) return
-        preferences.edit()
-            .putString(KEY_CUSTOM_CATEGORIES, (categories().filterNot { it in CATEGORIES } + normalized).joinToString("\n"))
-            .apply()
+    /** Returns true when a new custom category was stored. */
+    fun addCategory(category: String): Boolean {
+        val normalized = LauncherLogic.normalizeCategory(category, categories()) ?: return false
+        preferences.edit().putString(KEY_CUSTOM_CATEGORIES, (customCategories() + normalized).joinToString("\n")).apply()
+        return true
+    }
+
+    fun customCategories(): List<String> = categories().filterNot { it in CATEGORIES }
+
+    fun renameCategory(old: String, raw: String): Boolean {
+        if (old !in customCategories()) return false
+        val others = categories().filterNot { it == old }
+        val renamed = LauncherLogic.normalizeCategory(raw, others) ?: return false
+        val editor = preferences.edit()
+        editor.putString(KEY_CUSTOM_CATEGORIES, customCategories().map { if (it == old) renamed else it }.joinToString("\n"))
+        preferences.all.filter { (key, value) -> key.startsWith(KEY_CATEGORY_PREFIX) && value == old }
+            .keys.forEach { editor.putString(it, renamed) }
+        editor.apply()
+        return true
+    }
+
+    fun deleteCategory(name: String): Boolean {
+        if (name !in customCategories()) return false
+        val editor = preferences.edit()
+        editor.putString(KEY_CUSTOM_CATEGORIES, customCategories().filterNot { it == name }.joinToString("\n"))
+        preferences.all.filter { (key, value) -> key.startsWith(KEY_CATEGORY_PREFIX) && value == name }
+            .keys.forEach { editor.remove(it) }
+        editor.apply()
+        return true
     }
 
     fun hiddenApps(): Set<String> = preferences.getStringSet(KEY_HIDDEN, emptySet()).orEmpty().toSet()
@@ -61,33 +84,23 @@ class LauncherPreferences(context: Context) {
     fun orderedPackages(): List<String> =
         preferences.getString(KEY_ORDER, "").orEmpty().split('\n').filter(String::isNotBlank)
 
-    fun move(packageName: String, direction: Int, availablePackages: List<String>) {
-        val order = (orderedPackages().filter { it in availablePackages } +
-            availablePackages.filterNot { it in orderedPackages() }).toMutableList()
-        val index = order.indexOf(packageName)
-        val target = index + direction
-        if (index < 0 || target !in order.indices) return
-        val item = order.removeAt(index)
-        order.add(target, item)
+    fun move(packageName: String, neighbor: String, availablePackages: List<String>) {
+        val order = LauncherLogic.swap(orderedPackages(), availablePackages, packageName, neighbor)
         preferences.edit().putString(KEY_ORDER, order.joinToString("\n")).apply()
     }
 
     fun recordLaunch(packageName: String) {
-        val recent = preferences.getString(KEY_RECENTS, "").orEmpty()
-            .split('\n')
-            .filter { it.isNotBlank() && it != packageName }
-            .toMutableList()
-        recent.add(0, packageName)
-        preferences.edit().putString(KEY_RECENTS, recent.take(MAX_RECENTS).joinToString("\n")).apply()
+        val recent = LauncherLogic.recordRecent(recentPackages(), packageName, MAX_RECENTS)
+        preferences.edit().putString(KEY_RECENTS, recent.joinToString("\n")).apply()
     }
 
     fun recentPackages(): List<String> =
         preferences.getString(KEY_RECENTS, "").orEmpty().split('\n').filter(String::isNotBlank)
 
-    fun wallpaperDim(): Int = preferences.getInt(KEY_WALLPAPER_DIM, 38)
+    fun wallpaperDim(): Int = preferences.getInt(KEY_WALLPAPER_DIM, DEFAULT_DIM)
 
     fun setWallpaperDim(value: Int) {
-        preferences.edit().putInt(KEY_WALLPAPER_DIM, value.coerceIn(0, 70)).apply()
+        preferences.edit().putInt(KEY_WALLPAPER_DIM, value.coerceIn(0, MAX_DIM)).apply()
     }
 
     fun wallpaperUri(): String? = preferences.getString(KEY_WALLPAPER_URI, null)
@@ -96,8 +109,8 @@ class LauncherPreferences(context: Context) {
         preferences.edit().putString(KEY_WALLPAPER_URI, uri).apply()
     }
 
-    fun saveReleaseManifest(json: JSONObject) {
-        preferences.edit().putString(KEY_LAST_RELEASE, json.toString()).apply()
+    fun saveReleaseManifest(json: JSONObject?) {
+        preferences.edit().putString(KEY_LAST_RELEASE, json?.toString()).apply()
     }
 
     fun savedReleaseManifest(): JSONObject? =
@@ -114,6 +127,8 @@ class LauncherPreferences(context: Context) {
             "Otras",
         )
         const val DEFAULT_CATEGORY = "Otras"
+        const val DEFAULT_DIM = 10
+        const val MAX_DIM = 70
         private const val KEY_FAVORITES = "favorites"
         private const val KEY_CATEGORY_PREFIX = "category."
         private const val KEY_HIDDEN = "hidden"
@@ -124,6 +139,5 @@ class LauncherPreferences(context: Context) {
         private const val KEY_WALLPAPER_URI = "wallpaper_uri"
         private const val KEY_LAST_RELEASE = "last_release"
         private const val MAX_RECENTS = 12
-        private const val MAX_CATEGORY_LENGTH = 24
     }
 }
