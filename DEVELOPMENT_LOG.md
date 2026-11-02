@@ -1,5 +1,19 @@
 # Registro de desarrollo
 
+## Fase 3 — migración, validación y acabado visual
+
+Hecho y verificado en el TV:
+- Auditoría del sistema (`SYSTEM_AUDIT.md`) e inventario de aplicaciones (`APPLICATION_INVENTORY.md`).
+- Diálogos propios (`PanelDialog`), píldoras Wi-Fi/Bluetooth con estado real, sección Herramientas, gestor de categorías, exportar/importar preferencias, `scripts/tv_home.sh`.
+- Pruebas unitarias, lint y build debug correctos; memoria ≈63 MB PSS.
+
+Migración de HOME: **no lograda**. `cmd package set-home-activity` fue aceptado y el rol `android.app.role.HOME` apuntaba al launcher debug, pero al pulsar HOME (y con `am start -a MAIN -c HOME`) el sistema seguía iniciando `com.google.android.tvlauncher/.MainActivity`. Se revirtió con `restore-google`; Google TV es el HOME y el titular del rol.
+
+Pendiente:
+1. Manual: probar elegir NOBLEX en Ajustes de Android → Aplicaciones → Aplicación de inicio o en el selector HOME y comprobar si persiste.
+2. Sin verificar: cambio HDMI con fuente real, mando físico, renombrar categoría y ajuste del brillo en el TV, elegir imagen de fondo.
+3. Clave de firma de producción y release público (a propósito no hechos).
+
 ## Auditoría inicial
 
 - Confirmado Android 11/API 30, ARMv7, low-RAM, 1920×1080 a 320 dpi; Google TV sigue como HOME.

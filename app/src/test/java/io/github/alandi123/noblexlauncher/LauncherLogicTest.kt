@@ -24,6 +24,16 @@ class LauncherLogicTest {
     }
 
     @Test
+    fun defaultCategoriesPreferKnownAppsOverTheSystemFlag() {
+        assertEquals("Streaming", LauncherLogic.defaultCategory("com.netflix.ninja", system = true))
+        assertEquals("Música", LauncherLogic.defaultCategory("com.spotify.tv.android", system = false))
+        assertEquals("Juegos", LauncherLogic.defaultCategory("com.example.games.fun", system = false))
+        assertEquals("Herramientas", LauncherLogic.defaultCategory("com.homwee.help", system = true))
+        assertEquals("Sistema", LauncherLogic.defaultCategory("com.vendor.unknown", system = true))
+        assertEquals("Entretenimiento", LauncherLogic.defaultCategory("com.user.installed", system = false))
+    }
+
+    @Test
     fun recentsAreMostRecentFirstWithoutDuplicatesAndBounded() {
         var recents = emptyList<String>()
         listOf("a", "b", "c", "a", "d").forEach { recents = LauncherLogic.recordRecent(recents, it, 3) }

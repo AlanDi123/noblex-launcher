@@ -8,6 +8,14 @@
         <item name="android:windowBackground">#101719</item>
     </style>
 
+    <style name="PanelDialog" parent="@android:style/Theme.Material.Dialog.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:colorAccent">#B8C6C5</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+
     <style name="LauncherDialog" parent="@android:style/Theme.Material.Dialog.Alert">
         <item name="android:windowBackground">@drawable/dialog_background</item>
         <item name="android:colorAccent">#B8C6C5</item>

@@ -1,5 +1,19 @@
 # Informe final — NOBLEX LAUNCHER 0.2.0-rc.1 (candidato de release, no publicado)
 
+## Fase 3 — estado (migración temporal del candidato debug)
+
+**¿El TV abre NOBLEX LAUNCHER por defecto? No.** Google TV sigue siendo el HOME. Evidencia: tras `scripts/tv_home.sh set-noblex` el rol `android.app.role.HOME` listó `io.github.alandi123.noblexlauncher.debug`, pero `ActivityTaskManager` siguió iniciando `com.google.android.tvlauncher/.MainActivity` al pulsar HOME. Se ejecutó `restore-google` y se verificó (`holders=com.google.android.tvlauncher`). Paso manual restante: elegir NOBLEX como aplicación de inicio desde los ajustes/selector del TV.
+
+| Categoría | Elementos |
+|---|---|
+| Probado y funcionando | Pastillas Wi-Fi/Bluetooth y accesos oficiales con retorno por BACK; Ajustes; categorías (crear, persistir tras force-stop, eliminar); favoritos; ocultar/mostrar; menú contextual; Herramientas; lista de entradas; exportar e importar preferencias; lanzamiento de 21 paquetes; memoria ≈63 MB; tests unitarios, lint, build debug |
+| Probado parcialmente | Renombrar categoría; mover; brillo; selector de fondo (solo se abre) |
+| No probado | Mando físico; cambio HDMI con fuente real; TalkBack; otros televisores |
+| No soportado por Android/hardware | SSID de Wi-Fi (requiere permiso de ubicación); `BLUETOOTH_SETTINGS` no existe en este TV (se usa «Agregar accesorio»); HOME por shell no respetado por este firmware |
+| Requiere acción manual | Elegir NOBLEX como inicio; clave de firma de producción y release; probar HDMI con una fuente conectada |
+
+Detalles: `SYSTEM_AUDIT.md`, `APPLICATION_INVENTORY.md`, `REMOTE_CONTROL_TESTS.md`, `DEVELOPMENT_LOG.md`.
+
 ## Entregado en la fase 2
 
 - Auditoría completa y corrección por severidad: ver `RELEASE_READINESS.md`.

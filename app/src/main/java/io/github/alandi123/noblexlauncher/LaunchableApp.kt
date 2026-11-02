@@ -8,6 +8,7 @@ data class LaunchableApp(
     val label: String,
     val icon: Drawable,
     val banner: Drawable? = null,
+    val system: Boolean = false,
 )
 
 data class TvInputEntry(

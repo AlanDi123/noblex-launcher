@@ -2,6 +2,7 @@ package io.github.alandi123.noblexlauncher
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.ResolveInfo
 
 class AppDiscovery(private val context: Context) {
@@ -21,6 +22,7 @@ class AppDiscovery(private val context: Context) {
                     activityName = info.name,
                     label = result.loadLabel(packageManager).toString(),
                     icon = result.loadIcon(packageManager),
+                    system = (info.applicationInfo?.flags ?: 0) and ApplicationInfo.FLAG_SYSTEM != 0,
                     banner = if (category == Intent.CATEGORY_LEANBACK_LAUNCHER) info.loadBanner(packageManager) else null,
                 )
             }

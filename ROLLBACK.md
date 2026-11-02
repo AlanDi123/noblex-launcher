@@ -1,5 +1,14 @@
 # Recuperación
 
+Script verificado en el TV (Google TV debe estar instalado y habilitado; el script se niega si no lo está):
+
+```
+ANDROID_SERIAL=<ip:puerto> scripts/tv_home.sh status
+ANDROID_SERIAL=<ip:puerto> scripts/tv_home.sh restore-google
+```
+
+`set-noblex` guarda antes la salida del resolvedor HOME en `~/NoblexProject/backup/`. No deshabilita ni desinstala nada. Si algo falla, usa el procedimiento manual de abajo.
+
 El despliegue no desinstala, deshabilita ni reemplaza el launcher original.
 
 Para volver a Google TV, abre Ajustes de Android → Aplicaciones → Aplicaciones predeterminadas → Aplicación de inicio y selecciona Google TV. Si el TV presenta un selector HOME, elige el launcher original.

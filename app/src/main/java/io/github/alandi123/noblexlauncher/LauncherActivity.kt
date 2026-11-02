@@ -1,11 +1,16 @@
 package io.github.alandi123.noblexlauncher
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
+import android.content.res.ColorStateList
+import android.net.ConnectivityManager
+import android.net.Network
+import android.view.inputmethod.EditorInfo
+import android.bluetooth.BluetoothAdapter
+import java.io.ByteArrayOutputStream
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
@@ -46,6 +51,7 @@ class LauncherActivity : Activity() {
     private val appDiscovery by lazy { AppDiscovery(this) }
     private val tvInputRepository by lazy { TvInputRepository(this) }
     private val changhongTvAdapter by lazy { ChanghongTvAdapter(this) }
+    private val backupManager by lazy { BackupManager(this, preferences) }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
 
@@ -60,9 +66,12 @@ class LauncherActivity : Activity() {
     private lateinit var clockView: TextView
     private lateinit var dateView: TextView
     private lateinit var updateBadge: TextView
+    private lateinit var wifiPillStatus: TextView
+    private lateinit var bluetoothPillStatus: TextView
     private var wallpaperBitmap: Bitmap? = null
     private var firstCardTag: String? = null
     private var started = false
+    private var networkCallbackRegistered = false
 
     private val clockRunnable = object : Runnable {
         override fun run() {
@@ -80,6 +89,23 @@ class LauncherActivity : Activity() {
             mainHandler.postDelayed(reloadAppsRunnable, PACKAGE_CHANGE_DEBOUNCE_MS)
         }
     }
+
+    private val statusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = refreshStatusPills()
+    }
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = postStatusRefresh()
+        override fun onLost(network: Network) = postStatusRefresh()
+        override fun onCapabilitiesChanged(network: Network, capabilities: android.net.NetworkCapabilities) = postStatusRefresh()
+    }
+
+    private fun postStatusRefresh() {
+        mainHandler.removeCallbacks(statusRunnable)
+        mainHandler.postDelayed(statusRunnable, STATUS_DEBOUNCE_MS)
+    }
+
+    private val statusRunnable = Runnable { refreshStatusPills() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,6 +126,14 @@ class LauncherActivity : Activity() {
                 addDataScheme("package")
             },
         )
+        registerReceiver(statusReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+        try {
+            (getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)?.registerDefaultNetworkCallback(networkCallback)
+            networkCallbackRegistered = true
+        } catch (_: RuntimeException) {
+            networkCallbackRegistered = false
+        }
+        refreshStatusPills()
         loadWallpaperIfNeeded()
         reloadApps()
         refreshUpdateBadge()
@@ -111,7 +145,16 @@ class LauncherActivity : Activity() {
         started = false
         mainHandler.removeCallbacks(clockRunnable)
         mainHandler.removeCallbacks(reloadAppsRunnable)
+        mainHandler.removeCallbacks(statusRunnable)
         unregisterReceiver(packageReceiver)
+        unregisterReceiver(statusReceiver)
+        if (networkCallbackRegistered) {
+            try {
+                (getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)?.unregisterNetworkCallback(networkCallback)
+            } catch (_: IllegalArgumentException) {
+            }
+            networkCallbackRegistered = false
+        }
         super.onStop()
     }
 
@@ -157,7 +200,7 @@ class LauncherActivity : Activity() {
                 }
                 tag?.startsWith(TAG_CHIP) == true -> {
                     val filter = tag.removePrefix(TAG_CHIP)
-                    if (filter in preferences.customCategories()) showCategoryActions(filter) else showSettings()
+                    if (filter in preferences.categories()) showCategoryActions(filter) else showSettings()
                 }
                 else -> showSettings()
             }
@@ -169,8 +212,13 @@ class LauncherActivity : Activity() {
     @Deprecated("Deprecated in Android API; retained for API 28 compatibility.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_WALLPAPER || resultCode != RESULT_OK) return
+        if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
+        if (requestCode == REQUEST_IMPORT) {
+            confirmImport { backupManager.import(readBackupText(uri)) }
+            return
+        }
+        if (requestCode != REQUEST_WALLPAPER) return
         Toast.makeText(this, "Preparando el fondo…", Toast.LENGTH_SHORT).show()
         runOnWorker {
             val result = try {
@@ -195,6 +243,21 @@ class LauncherActivity : Activity() {
                 )
             }
         }
+    }
+
+    private fun readBackupText(uri: Uri): String {
+        val output = ByteArrayOutputStream()
+        val input = contentResolver.openInputStream(uri) ?: throw IOException("No se pudo leer el archivo.")
+        input.use { stream ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                val read = stream.read(buffer)
+                if (read < 0) break
+                output.write(buffer, 0, read)
+                if (output.size() > PreferencesBackup.MAX_BYTES) throw IOException("El archivo de respaldo es demasiado grande.")
+            }
+        }
+        return output.toString(Charsets.UTF_8.name())
     }
 
     // ---------------------------------------------------------------- layout
@@ -251,17 +314,22 @@ class LauncherActivity : Activity() {
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         brand.addView(text("NOBLEX", 26f, Color.WHITE, bold = true))
         brand.addView(text("L A U N C H E R", 12f, Color.rgb(200, 214, 211)))
+        updateBadge = text("", 13f, Color.rgb(190, 226, 205), bold = true).apply { visibility = View.GONE }
+        brand.addView(updateBadge)
         row.addView(brand)
-
-        updateBadge = text("", 15f, Color.rgb(230, 240, 236), bold = true).apply { visibility = View.GONE }
-        row.addView(updateBadge, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)).apply {
-            marginStart = dp(28)
-        })
         row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
 
-        val settings = button("Ajustes") { showSettings() }
-        settings.tag = TAG_SETTINGS
-        row.addView(settings, LinearLayout.LayoutParams(dp(120), dp(48)).apply { marginEnd = dp(28) })
+        val wifi = statusPill("Wi-Fi", R.drawable.ic_wifi, TAG_WIFI) { showWifi() }
+        wifiPillStatus = wifi.second
+        row.addView(wifi.first, LinearLayout.LayoutParams(dp(196), dp(52)).apply { marginEnd = dp(12) })
+        val bluetooth = statusPill("Bluetooth", R.drawable.ic_bluetooth, TAG_BLUETOOTH) { showBluetooth() }
+        bluetoothPillStatus = bluetooth.second
+        row.addView(bluetooth.first, LinearLayout.LayoutParams(dp(176), dp(52)).apply { marginEnd = dp(12) })
+
+        val settings = statusPill("Ajustes", R.drawable.ic_settings, TAG_SETTINGS) { showSettings() }
+        settings.second.visibility = View.GONE
+        settings.first.contentDescription = "Ajustes"
+        row.addView(settings.first, LinearLayout.LayoutParams(dp(132), dp(52)).apply { marginEnd = dp(26) })
 
         val clockBlock = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -275,11 +343,64 @@ class LauncherActivity : Activity() {
         return row
     }
 
+    /** Focusable header control: icon, name and (optionally) a live status line. */
+    private fun statusPill(title: String, icon: Int, tag: String, onClick: () -> Unit): Pair<View, TextView> {
+        val glyph = ImageView(this).apply {
+            setImageResource(icon)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            imageTintList = ColorStateList.valueOf(Color.rgb(228, 238, 234))
+        }
+        val name = text(title, 15f, Color.WHITE, bold = true)
+        val status = text("", 12f, Color.rgb(200, 214, 211)).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        val texts = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(name)
+            addView(status)
+        }
+        val pill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isFocusable = true
+            isClickable = true
+            this.tag = tag
+            background = getDrawable(R.drawable.focus_chip)
+            setPadding(dp(14), 0, dp(12), 0)
+            setOnClickListener { onClick() }
+            setOnFocusChangeListener { _, focused ->
+                val ink = if (focused) Color.rgb(24, 36, 37) else Color.WHITE
+                name.setTextColor(ink)
+                status.setTextColor(if (focused) Color.rgb(48, 66, 64) else Color.rgb(200, 214, 211))
+                glyph.imageTintList = ColorStateList.valueOf(if (focused) ink else Color.rgb(228, 238, 234))
+            }
+        }
+        pill.addView(glyph, LinearLayout.LayoutParams(dp(24), dp(24)).apply { marginEnd = dp(10) })
+        pill.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        return pill to status
+    }
+
+    private fun refreshStatusPills() {
+        if (!::wifiPillStatus.isInitialized) return
+        val network = ConnectivityStatus.network(this)
+        val wifi = ConnectivityStatus.wifiText(network)
+        wifiPillStatus.text = wifi
+        (wifiPillStatus.parent.parent as View).contentDescription = "Wi-Fi: $wifi"
+        val bluetooth = ConnectivityStatus.bluetoothText(ConnectivityStatus.bluetooth())
+        bluetoothPillStatus.text = bluetooth
+        (bluetoothPillStatus.parent.parent as View).contentDescription = "Bluetooth: $bluetooth"
+    }
+
     /** Rebuilds only the lower area; the wallpaper, clock and header persist across rebuilds. */
     private fun refreshContent(focusTag: String?) {
         contentHost.removeAllViews()
         firstCardTag = null
-        contentHost.addView(sectionTitle(if (currentFilter == FILTER_INPUTS) "Entradas de TV" else "Tus aplicaciones"))
+        contentHost.addView(sectionTitle(when (currentFilter) {
+            FILTER_INPUTS -> "Entradas de TV"
+            FILTER_TOOLS -> "Herramientas"
+            else -> "Tus aplicaciones"
+        }))
         contentHost.addView(buildFilters(), marginBottom = dp(6))
         when {
             currentFilter == FILTER_INPUTS -> contentHost.addView(buildInputRow())
@@ -287,10 +408,11 @@ class LauncherActivity : Activity() {
             else -> contentHost.addView(buildAppRow())
         }
         contentHost.addView(
-            text("MENU: organizar aplicaciones y categorías  ·  ATRÁS: volver a Todas", 15f, Color.rgb(205, 218, 215)),
+            text("MENU: organizar  ·  ATRÁS: volver a Todas  ·  INICIO: volver aquí", 15f, Color.rgb(205, 218, 215)),
             marginTop = dp(10),
         )
         updateClock()
+        refreshStatusPills()
         restoreFocus(focusTag)
     }
 
@@ -319,6 +441,7 @@ class LauncherActivity : Activity() {
                 refreshContent("$TAG_CHIP$filter")
             }
             chip.tag = "$TAG_CHIP$filter"
+            chip.setPadding(dp(22), 0, dp(22), 0)
             chip.isSelected = currentFilter == filter
             chip.contentDescription = if (currentFilter == filter) "$filter, seleccionado" else filter
             row.addView(chip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)).apply {
@@ -335,6 +458,7 @@ class LauncherActivity : Activity() {
         val order = preferences.orderedPackages()
         val recents = preferences.recentPackages()
         val candidates = apps.filterNot { it.packageName in hidden }
+        val validCategories = preferences.categories()
         return when (currentFilter) {
             FILTER_RECENT -> candidates.filter { it.packageName in recents }.sortedBy { recents.indexOf(it.packageName) }
             else -> candidates
@@ -342,7 +466,7 @@ class LauncherActivity : Activity() {
                     when (currentFilter) {
                         FILTER_FAVORITES -> app.packageName in favorites
                         FILTER_ALL -> true
-                        else -> preferences.category(app.packageName) == currentFilter
+                        else -> categoryOf(app, validCategories) == currentFilter
                     }
                 }
                 .sortedWith(
@@ -355,7 +479,7 @@ class LauncherActivity : Activity() {
 
     private fun buildAppRow(): View {
         val visibleApps = visibleApps()
-        if (visibleApps.isEmpty()) {
+        if (visibleApps.isEmpty() && currentFilter != FILTER_TOOLS) {
             return message(
                 when (currentFilter) {
                     FILTER_FAVORITES -> "Agrega aplicaciones a Favoritos con MENU."
@@ -370,9 +494,18 @@ class LauncherActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             clipChildren = false
         }
+        if (currentFilter == FILTER_TOOLS) {
+            tools().forEach { tool ->
+                val card = createToolCard(tool)
+                if (firstCardTag == null) firstCardTag = card.tag as String
+                row.addView(card, LinearLayout.LayoutParams(dp(CARD_WIDTH_DP), dp(CARD_HEIGHT_DP)).apply {
+                    marginEnd = dp(CARD_GAP_DP)
+                })
+            }
+        }
         visibleApps.forEachIndexed { index, app ->
             val card = createAppCard(app, app.packageName in favorites)
-            if (index == 0) firstCardTag = card.tag as String
+            if (firstCardTag == null) firstCardTag = card.tag as String
             row.addView(card, LinearLayout.LayoutParams(dp(CARD_WIDTH_DP), dp(CARD_HEIGHT_DP)).apply {
                 marginEnd = dp(CARD_GAP_DP)
             })
@@ -404,11 +537,7 @@ class LauncherActivity : Activity() {
             setPadding(dp(10), dp(10), dp(10), dp(8))
             contentDescription = app.label + if (favorite) ", favorita" else ""
             tag = "$TAG_APP${app.packageName}"
-            setOnFocusChangeListener { view, hasFocus ->
-                view.animate().cancel()
-                view.animate().scaleX(if (hasFocus) 1.06f else 1f).scaleY(if (hasFocus) 1.06f else 1f).setDuration(120L)
-                if (hasFocus) view.elevation = dp(8).toFloat() else view.elevation = 0f
-            }
+            setOnFocusChangeListener { view, hasFocus -> focusScale(view, hasFocus) }
             setOnClickListener { launchApp(app) }
             setOnLongClickListener {
                 showAppActions(app)
@@ -434,35 +563,69 @@ class LauncherActivity : Activity() {
         return card
     }
 
+    private fun focusScale(view: View, hasFocus: Boolean) {
+        view.animate().cancel()
+        view.animate().scaleX(if (hasFocus) 1.06f else 1f).scaleY(if (hasFocus) 1.06f else 1f).setDuration(120L)
+        view.elevation = if (hasFocus) dp(8).toFloat() else 0f
+    }
+
+    private fun iconCard(tag: String, title: String, subtitle: String, icon: Int, description: String, onClick: () -> Unit): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            isFocusable = true
+            isClickable = true
+            background = getDrawable(R.drawable.focus_card)
+            setPadding(dp(10), dp(10), dp(10), dp(8))
+            contentDescription = description
+            this.tag = tag
+            setOnFocusChangeListener { view, hasFocus -> focusScale(view, hasFocus) }
+            setOnClickListener { onClick() }
+        }
+        val artwork = ImageView(this).apply {
+            background = getDrawable(R.drawable.card_tile)
+            outlineProvider = ViewOutlineProvider.BACKGROUND
+            clipToOutline = true
+            setImageResource(icon)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(dp(40), dp(24), dp(40), dp(24))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        card.addView(artwork, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(ARTWORK_HEIGHT_DP)))
+        card.addView(text(title, 16f, Color.WHITE, bold = true).apply {
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        card.addView(text(subtitle, 12f, Color.rgb(205, 218, 215)).apply {
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        return card
+    }
+
+    private fun createToolCard(tool: Tool): View =
+        iconCard("$TAG_TOOL${tool.id}", tool.title, tool.subtitle, tool.icon, "${tool.title}. ${tool.subtitle}") { tool.action() }
+
     private fun buildInputRow(): View {
         val inputs = tvInputRepository.discover()
-        if (inputs.isEmpty()) return message("Android no informó entradas de TV disponibles.")
         val scroll = cardScroll()
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             clipChildren = false
         }
-        inputs.forEachIndexed { index, input ->
-            val card = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                isFocusable = true
-                isClickable = true
-                background = getDrawable(R.drawable.focus_card)
-                tag = "$TAG_INPUT${input.id}"
-                contentDescription = "${input.label}, ${TvInputRepository.stateLabel(input.state)}"
-                setOnClickListener { showInputDetails(input) }
-                setOnFocusChangeListener { view, hasFocus ->
-                    view.animate().cancel()
-                    view.animate().scaleX(if (hasFocus) 1.06f else 1f).scaleY(if (hasFocus) 1.06f else 1f).setDuration(120L)
-                }
-            }
-            card.addView(text(input.label, 18f, Color.WHITE, bold = true).apply { gravity = Gravity.CENTER })
-            card.addView(text(TvInputRepository.stateLabel(input.state), 14f, Color.rgb(205, 218, 215)).apply {
-                gravity = Gravity.CENTER
-            })
-            if (index == 0) firstCardTag = card.tag as String
-            row.addView(card, LinearLayout.LayoutParams(dp(CARD_WIDTH_DP), dp(96)).apply { marginEnd = dp(CARD_GAP_DP) })
+        val live = iconCard("${TAG_INPUT}live-tv", "TV en vivo", "Aplicación de TV", R.drawable.ic_tv, "TV en vivo") { openTelevisionApp() }
+        firstCardTag = live.tag as String
+        row.addView(live, LinearLayout.LayoutParams(dp(CARD_WIDTH_DP), dp(CARD_HEIGHT_DP)).apply { marginEnd = dp(CARD_GAP_DP) })
+        inputs.forEach { input ->
+            val state = TvInputRepository.stateLabel(input.state)
+            val card = iconCard(
+                "$TAG_INPUT${input.id}", input.label, state,
+                if (input.passthrough) R.drawable.ic_input else R.drawable.ic_tv,
+                "${input.label}, $state",
+            ) { showInputDetails(input) }
+            row.addView(card, LinearLayout.LayoutParams(dp(CARD_WIDTH_DP), dp(CARD_HEIGHT_DP)).apply { marginEnd = dp(CARD_GAP_DP) })
         }
         scroll.addView(row)
         return scroll
@@ -495,7 +658,7 @@ class LauncherActivity : Activity() {
         val release = preferences.savedReleaseManifest()
         val available = release != null && release.optLong("versionCode", 0L) > BuildConfig.VERSION_CODE
         updateBadge.visibility = if (available) View.VISIBLE else View.GONE
-        updateBadge.text = "Actualización ${release?.optString("version").orEmpty()} disponible · Ajustes"
+        updateBadge.text = "Actualización ${release?.optString("version").orEmpty()} disponible"
     }
 
     // ---------------------------------------------------------------- wallpaper
@@ -575,39 +738,34 @@ class LauncherActivity : Activity() {
         return target
     }
 
-    // ---------------------------------------------------------------- dialogs
+    // ---------------------------------------------------------------- panels
 
-    private fun dialog(): AlertDialog.Builder = AlertDialog.Builder(this, R.style.LauncherDialog)
+    private fun panel() = PanelDialog(this)
+
+    private fun toast(message: String, long: Boolean = false) =
+        Toast.makeText(this, message, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+
+    private fun categoryOf(app: LaunchableApp, valid: Collection<String> = preferences.categories()): String =
+        preferences.category(app.packageName, LauncherLogic.defaultCategory(app.packageName, app.system), valid)
 
     private fun showAppActions(app: LaunchableApp) {
         val tag = "$TAG_APP${app.packageName}"
-        val choices = arrayOf(
-            if (preferences.isFavorite(app.packageName)) "Quitar de Favoritos" else "Agregar a Favoritos",
-            "Asignar categoría",
-            "Mover antes",
-            "Mover después",
-            if (app.packageName in preferences.hiddenApps()) "Mostrar aplicación" else "Ocultar aplicación",
-        )
-        dialog()
-            .setTitle(app.label)
-            .setItems(choices) { _, selected ->
-                var focus: String? = tag
-                when (selected) {
-                    0 -> preferences.toggleFavorite(app.packageName)
-                    1 -> {
-                        chooseCategory(app)
-                        return@setItems
-                    }
-                    2 -> moveApp(app, -1)
-                    3 -> moveApp(app, 1)
-                    4 -> {
-                        preferences.toggleHidden(app.packageName)
-                        focus = null
-                    }
-                }
-                refreshContent(focus)
+        val favorite = preferences.isFavorite(app.packageName)
+        val hidden = app.packageName in preferences.hiddenApps()
+        panel()
+            .title(app.label)
+            .message("Categoría: ${categoryOf(app)}")
+            .item(if (favorite) "Quitar de Favoritos" else "Agregar a Favoritos") {
+                preferences.toggleFavorite(app.packageName)
+                refreshContent(tag)
             }
-            .setNegativeButton("Cerrar", null)
+            .item("Asignar categoría") { chooseCategory(app) }
+            .item("Mover antes") { moveApp(app, -1); refreshContent(tag) }
+            .item("Mover después") { moveApp(app, 1); refreshContent(tag) }
+            .item(if (hidden) "Mostrar aplicación" else "Ocultar aplicación", if (hidden) null else "Se puede restaurar en Ajustes → Aplicaciones ocultas") {
+                preferences.toggleHidden(app.packageName)
+                refreshContent(null)
+            }
             .show()
     }
 
@@ -616,16 +774,16 @@ class LauncherActivity : Activity() {
         val index = visible.indexOfFirst { it.packageName == app.packageName }
         val neighbor = visible.getOrNull(index + direction)
         if (index < 0 || neighbor == null) {
-            Toast.makeText(this, "No se puede mover más en esa dirección.", Toast.LENGTH_SHORT).show()
+            toast("No se puede mover más en esa dirección.")
             return
         }
         val favorites = preferences.favorites()
         if (currentFilter == FILTER_RECENT) {
-            Toast.makeText(this, "Recientes se ordena por uso; usa Todas para reordenar.", Toast.LENGTH_SHORT).show()
+            toast("Recientes se ordena por uso; usa Todas para reordenar.")
             return
         }
         if ((app.packageName in favorites) != (neighbor.packageName in favorites)) {
-            Toast.makeText(this, "Los favoritos siempre aparecen primero.", Toast.LENGTH_SHORT).show()
+            toast("Los favoritos siempre aparecen primero.")
             return
         }
         preferences.move(app.packageName, neighbor.packageName, apps.map(LaunchableApp::packageName))
@@ -633,61 +791,95 @@ class LauncherActivity : Activity() {
 
     private fun chooseCategory(app: LaunchableApp) {
         val categories = preferences.categories()
-        val choices = (categories + "Crear categoría…").toTypedArray()
-        dialog()
-            .setTitle("Categoría para ${app.label}")
-            .setItems(choices) { _, selected ->
-                if (selected == categories.size) {
-                    askCategoryName("Nueva categoría", "") { name ->
-                        if (preferences.addCategory(name)) {
-                            val stored = preferences.categories().last { it.equals(name.trim(), ignoreCase = true) }
-                            preferences.setCategory(app.packageName, stored)
-                            refreshContent("$TAG_APP${app.packageName}")
-                        } else {
-                            Toast.makeText(this, "Nombre no válido o repetido.", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                } else {
-                    preferences.setCategory(app.packageName, categories[selected])
+        val current = categoryOf(app, categories)
+        val builder = panel().title("Categoría para ${app.label}")
+        categories.forEach { name ->
+            builder.item(name, if (name == current) "Categoría actual" else null) {
+                preferences.setCategory(app.packageName, name)
+                refreshContent("$TAG_APP${app.packageName}")
+            }
+        }
+        builder.item("Crear categoría nueva…") {
+            askCategoryName("Nueva categoría", "") { name ->
+                if (preferences.addCategory(name)) {
+                    val stored = preferences.categories().last { it.equals(name.trim(), ignoreCase = true) }
+                    preferences.setCategory(app.packageName, stored)
                     refreshContent("$TAG_APP${app.packageName}")
+                } else {
+                    toast("Nombre no válido o repetido.", long = true)
                 }
             }
-            .setNegativeButton("Cancelar", null)
-            .show()
+        }
+        builder.show()
+    }
+
+    /** Full category management screen: order, create, rename and delete. */
+    private fun manageCategories(focusName: String? = null) {
+        val categories = preferences.categories()
+        val valid = categories.toSet()
+        val counts = apps.groupingBy { categoryOf(it, valid) }.eachCount()
+        val builder = panel().title("Categorías").width(700)
+        builder.item("Crear categoría nueva", "Agrupa tus aplicaciones a tu manera") {
+            askCategoryName("Nueva categoría", "") { name ->
+                if (preferences.addCategory(name)) {
+                    refreshContent(null)
+                    manageCategories(name.trim())
+                } else {
+                    toast("Nombre no válido o repetido.", long = true)
+                    manageCategories()
+                }
+            }
+        }
+        categories.forEach { name ->
+            val kind = if (preferences.isBuiltInCategory(name)) "integrada" else "personalizada"
+            builder.item(name, "${counts[name] ?: 0} aplicaciones · $kind") { showCategoryActions(name) }
+        }
+        builder.negative("Cerrar") { refreshContent(null) }.show()
     }
 
     private fun showCategoryActions(category: String) {
-        dialog()
-            .setTitle(category)
-            .setItems(arrayOf("Renombrar categoría", "Eliminar categoría")) { _, selected ->
-                if (selected == 0) {
-                    askCategoryName("Renombrar categoría", category) { name ->
-                        if (preferences.renameCategory(category, name)) {
-                            val renamed = LauncherLogic.normalizeCategory(name, emptyList()) ?: category
-                            if (currentFilter == category) currentFilter = renamed
-                            refreshContent("$TAG_CHIP$renamed")
-                        } else {
-                            Toast.makeText(this, "Nombre no válido o repetido.", Toast.LENGTH_LONG).show()
-                        }
+        val builtIn = preferences.isBuiltInCategory(category)
+        val builder = panel().title(category)
+            .message(if (builtIn) "Categoría integrada: puedes cambiar su posición pero no su nombre." else "Categoría personalizada.")
+            .item("Mover antes") {
+                if (!preferences.moveCategory(category, -1)) toast("Ya está al principio.")
+                refreshContent(null)
+                manageCategories()
+            }
+            .item("Mover después") {
+                if (!preferences.moveCategory(category, 1)) toast("Ya está al final.")
+                refreshContent(null)
+                manageCategories()
+            }
+        if (!builtIn) {
+            builder.item("Renombrar categoría") {
+                askCategoryName("Renombrar categoría", category) { name ->
+                    if (preferences.renameCategory(category, name)) {
+                        val renamed = LauncherLogic.normalizeCategory(name, emptyList()) ?: category
+                        if (currentFilter == category) currentFilter = renamed
+                        refreshContent(null)
+                    } else {
+                        toast("Nombre no válido o repetido.", long = true)
                     }
-                } else {
-                    confirmDeleteCategory(category)
+                    manageCategories()
                 }
             }
-            .setNegativeButton("Cerrar", null)
-            .show()
+            builder.item("Eliminar categoría", "Sus aplicaciones vuelven a su categoría automática") { confirmDeleteCategory(category) }
+        }
+        builder.negative("Volver") { manageCategories() }.show()
     }
 
     private fun confirmDeleteCategory(category: String) {
-        dialog()
-            .setTitle("¿Eliminar «$category»?")
-            .setMessage("Sus aplicaciones volverán a «${LauncherPreferences.DEFAULT_CATEGORY}». No se desinstala nada.")
-            .setPositiveButton("Eliminar") { _, _ ->
+        panel()
+            .title("¿Eliminar «$category»?")
+            .message("Sus aplicaciones volverán a su categoría automática. No se desinstala nada.")
+            .positive("Eliminar") {
                 preferences.deleteCategory(category)
                 if (currentFilter == category) currentFilter = FILTER_ALL
-                refreshContent("$TAG_CHIP$FILTER_ALL")
+                refreshContent(null)
+                manageCategories()
             }
-            .setNegativeButton("Cancelar", null)
+            .negative("Cancelar") { manageCategories() }
             .show()
     }
 
@@ -696,14 +888,65 @@ class LauncherActivity : Activity() {
             hint = "Nombre de categoría"
             setText(initial)
             isSingleLine = true
+            textSize = 20f
             setTextColor(Color.WHITE)
             setHintTextColor(Color.rgb(160, 175, 172))
+            background = getDrawable(R.drawable.field_background)
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+            imeOptions = EditorInfo.IME_ACTION_DONE
         }
-        dialog()
-            .setTitle(title)
-            .setView(input)
-            .setPositiveButton("Guardar") { _, _ -> onName(input.text.toString()) }
-            .setNegativeButton("Cancelar", null)
+        val dialog = panel()
+            .title(title)
+            .message("Máximo ${LauncherLogic.MAX_CATEGORY_LENGTH} caracteres.")
+            .view(input)
+            .positive("Guardar") { onName(input.text.toString()) }
+            .negative("Cancelar") { if (title.startsWith("Renombrar")) manageCategories() }
+            .show()
+        // The on-screen keyboard owns DPAD focus while typing, so its Done key must save.
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                dialog.dismiss()
+                onName(input.text.toString())
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    // ---- connectivity
+
+    private fun showWifi() {
+        val network = ConnectivityStatus.network(this)
+        panel()
+            .title("Wi-Fi")
+            .message(
+                "Estado: ${ConnectivityStatus.wifiText(network)}.\n\n" +
+                    "Android no entrega el nombre de la red a aplicaciones sin permiso de ubicación, por eso no se muestra. " +
+                    "NOBLEX LAUNCHER nunca cambia tu red: los cambios se hacen en los ajustes oficiales de Android.",
+            )
+            .positive("Abrir ajustes de Wi-Fi") {
+                if (!SystemShortcuts.openWifi(this)) toast("Este televisor no expone los ajustes de Wi-Fi.", long = true)
+            }
+            .show()
+    }
+
+    private fun showBluetooth() {
+        val state = ConnectivityStatus.bluetooth()
+        panel()
+            .title("Bluetooth")
+            .message(
+                "Adaptador: ${ConnectivityStatus.bluetoothText(state)}.\n\n" +
+                    "«Agregar accesorio» abre la pantalla oficial de Android TV que busca mandos, teclados o audio. " +
+                    "No se empareja nada sin que lo elijas, y tus dispositivos ya emparejados no se modifican. " +
+                    "Para olvidar o revisar dispositivos usa los ajustes de Android.",
+            )
+            .positive("Agregar accesorio") {
+                if (!SystemShortcuts.openBluetooth(this)) toast("Este televisor no expone la configuración Bluetooth.", long = true)
+            }
+            .neutral("Ajustes de Android") {
+                if (!SystemShortcuts.openSettings(this)) toast("No se pudieron abrir los ajustes de Android.", long = true)
+            }
             .show()
     }
 
@@ -715,52 +958,46 @@ class LauncherActivity : Activity() {
         } else {
             "Es el sintonizador del televisor. Ábrelo con la aplicación de TV del fabricante."
         }
-        val builder = dialog().setTitle(input.label).setMessage(message)
+        val builder = panel().title(input.label).message(message)
         if (input.passthrough) {
-            builder.setPositiveButton("Cambiar a esta entrada") { _, _ ->
+            builder.positive("Cambiar a esta entrada") {
                 if (!tvInputRepository.switchTo(input)) {
-                    Toast.makeText(this, "Este televisor no acepta el cambio de entrada desde aplicaciones.", Toast.LENGTH_LONG).show()
+                    toast("Este televisor no acepta el cambio de entrada desde aplicaciones.", long = true)
                 }
             }
-            builder.setNeutralButton("Abrir TV") { _, _ -> openTelevisionApp() }
+            builder.neutral("Abrir TV") { openTelevisionApp() }
         } else {
-            builder.setPositiveButton("Abrir TV") { _, _ -> openTelevisionApp() }
+            builder.positive("Abrir TV") { openTelevisionApp() }
         }
-        builder.setNegativeButton("Cerrar", null).show()
+        builder.negative("Cerrar").show()
     }
 
     private fun openTelevisionApp() {
-        if (!changhongTvAdapter.openTelevisionApp()) {
-            Toast.makeText(this, "No se encontró una aplicación de TV compatible.", Toast.LENGTH_LONG).show()
-        }
+        if (!changhongTvAdapter.openTelevisionApp()) toast("No se encontró una aplicación de TV compatible.", long = true)
     }
 
+    // ---- settings
+
     private fun showSettings() {
-        val options = arrayOf(
-            "Elegir fondo",
-            "Restaurar fondo original",
-            "Brillo del fondo",
-            "Administrar categorías",
-            "Aplicaciones ocultas",
-            "Comprobar actualizaciones",
-            "Acerca de NOBLEX LAUNCHER",
-            "Volver al launcher original",
-        )
-        dialog()
-            .setTitle("Ajustes")
-            .setItems(options) { _, selected ->
-                when (selected) {
-                    0 -> chooseWallpaper()
-                    1 -> restoreWallpaper()
-                    2 -> showWallpaperDim()
-                    3 -> manageCategories()
-                    4 -> manageHiddenApps()
-                    5 -> checkForUpdates()
-                    6 -> showAbout()
-                    7 -> showRestoreInstructions()
-                }
-            }
-            .setNegativeButton("Cerrar", null)
+        panel()
+            .title("Ajustes")
+            .item("Fondo y brillo", "Imagen del paisaje y legibilidad") { showWallpaperSettings() }
+            .item("Categorías", "Crear, renombrar, ordenar y eliminar") { manageCategories() }
+            .item("Aplicaciones ocultas", "Mostrar de nuevo lo que ocultaste") { manageHiddenApps() }
+            .item("Respaldo y migración", "Exportar o importar tus preferencias") { showBackup() }
+            .item("Centro de actualizaciones", "Versión ${BuildConfig.VERSION_NAME}") { showUpdateCenter() }
+            .item("Acerca de NOBLEX LAUNCHER") { showAbout() }
+            .item("Volver al launcher original", "Cómo restaurar Google TV como inicio") { showRestoreInstructions() }
+            .show()
+    }
+
+    private fun showWallpaperSettings() {
+        panel()
+            .title("Fondo y brillo")
+            .item("Elegir imagen", "Desde el almacenamiento del televisor") { chooseWallpaper() }
+            .item("Brillo del fondo", "Oscurecimiento actual: ${preferences.wallpaperDim()} %") { showWallpaperDim() }
+            .item("Restaurar fondo original", "Montañas y bosque incluidos") { restoreWallpaper() }
+            .negative("Volver") { showSettings() }
             .show()
     }
 
@@ -772,7 +1009,7 @@ class LauncherActivity : Activity() {
         try {
             startActivityForResult(intent, REQUEST_WALLPAPER)
         } catch (error: ActivityNotFoundException) {
-            Toast.makeText(this, "No hay un selector de imágenes disponible en este dispositivo.", Toast.LENGTH_LONG).show()
+            toast("No hay un selector de imágenes disponible en este dispositivo.", long = true)
         }
     }
 
@@ -781,16 +1018,20 @@ class LauncherActivity : Activity() {
         File(File(filesDir, "wallpapers"), "user-wallpaper.jpg").delete()
         wallpaperBitmap = null
         loadWallpaperIfNeeded()
-        Toast.makeText(this, "Fondo original restaurado.", Toast.LENGTH_SHORT).show()
+        toast("Fondo original restaurado.")
     }
 
     private fun showWallpaperDim() {
+        val value = text("", 18f, Color.WHITE)
+        fun render(progress: Int) { value.text = "Oscurecimiento: $progress %" }
         val slider = SeekBar(this).apply {
             max = LauncherPreferences.MAX_DIM
             progress = preferences.wallpaperDim()
+            keyProgressIncrement = 2
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
                     dimView.alpha = value / 100f
+                    render(value)
                 }
 
                 override fun onStartTrackingTouch(bar: SeekBar) = Unit
@@ -798,33 +1039,19 @@ class LauncherActivity : Activity() {
                 override fun onStopTrackingTouch(bar: SeekBar) = Unit
             })
         }
-        dialog()
-            .setTitle("Oscurecimiento del fondo")
-            .setMessage("Usa ◀ ▶ para ajustar la legibilidad del texto sobre el paisaje.")
-            .setView(slider)
-            .setPositiveButton("Listo") { _, _ -> preferences.setWallpaperDim(slider.progress) }
-            .setNegativeButton("Cancelar", null)
-            .setOnDismissListener { dimView.alpha = preferences.wallpaperDim() / 100f }
-            .show()
-    }
-
-    private fun manageCategories() {
-        val custom = preferences.customCategories()
-        val items = custom.toTypedArray()
-        val builder = dialog().setTitle("Categorías personalizadas")
-        if (items.isEmpty()) {
-            builder.setMessage("Aún no hay categorías propias. Las integradas no se pueden modificar.")
-        } else {
-            builder.setItems(items) { _, index -> showCategoryActions(custom[index]) }
+        render(slider.progress)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(value)
+            addView(slider, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         }
-        builder
-            .setPositiveButton("Crear categoría") { _, _ ->
-                askCategoryName("Nueva categoría", "") { name ->
-                    if (preferences.addCategory(name)) refreshContent(null)
-                    else Toast.makeText(this, "Nombre no válido o repetido.", Toast.LENGTH_LONG).show()
-                }
-            }
-            .setNegativeButton("Cerrar", null)
+        panel()
+            .title("Brillo del fondo")
+            .message("Usa ◀ ▶ para ajustar la legibilidad del texto sobre el paisaje. Menos oscurecimiento = fondo más luminoso.")
+            .view(content)
+            .positive("Listo") { preferences.setWallpaperDim(slider.progress); showWallpaperSettings() }
+            .negative("Cancelar") { showWallpaperSettings() }
+            .onDismiss { dimView.alpha = preferences.wallpaperDim() / 100f }
             .show()
     }
 
@@ -832,29 +1059,146 @@ class LauncherActivity : Activity() {
         val hidden = preferences.hiddenApps()
         val entries = apps.filter { it.packageName in hidden }
         if (entries.isEmpty()) {
-            Toast.makeText(this, "No hay aplicaciones ocultas.", Toast.LENGTH_SHORT).show()
+            panel().title("Aplicaciones ocultas").message("No hay aplicaciones ocultas.").negative("Volver") { showSettings() }.show()
             return
         }
-        dialog()
-            .setTitle("Aplicaciones ocultas")
-            .setItems(entries.map(LaunchableApp::label).toTypedArray()) { _, index ->
-                preferences.toggleHidden(entries[index].packageName)
-                refreshContent("$TAG_APP${entries[index].packageName}")
-                Toast.makeText(this, "${entries[index].label} vuelve a estar visible.", Toast.LENGTH_SHORT).show()
+        val builder = panel().title("Aplicaciones ocultas").message("Elige una para mostrarla de nuevo.")
+        entries.forEach { app ->
+            builder.item(app.label, "Mostrar de nuevo") {
+                preferences.toggleHidden(app.packageName)
+                refreshContent("$TAG_APP${app.packageName}")
+                toast("${app.label} vuelve a estar visible.")
+                manageHiddenApps()
             }
-            .setNegativeButton("Cerrar", null)
+        }
+        builder.negative("Volver") { showSettings() }.show()
+    }
+
+    // ---- backup
+
+    private fun showBackup() {
+        panel()
+            .title("Respaldo y migración")
+            .message(
+                "Guarda favoritos, categorías, orden, aplicaciones ocultas, fondo y brillo en un archivo local. " +
+                    "Sirve para pasar tus preferencias del paquete de prueba (.debug) a la versión definitiva, " +
+                    "porque Android no migra datos entre aplicaciones distintas. El archivo nunca se sube a internet.",
+            )
+            .item("Exportar preferencias") { exportBackup() }
+            .item("Importar desde esta aplicación", "Respaldos guardados por este paquete") { importFromOwnFolder() }
+            .item("Importar desde otro archivo…", "Por ejemplo Download/NoblexLauncher") { pickBackupFile() }
+            .negative("Volver") { showSettings() }
+            .show()
+    }
+
+    private fun exportBackup() {
+        runOnWorker {
+            val result = try {
+                Result.success(backupManager.export())
+            } catch (error: IOException) {
+                Result.failure(error)
+            }
+            runOnUiThread {
+                if (destroyed) return@runOnUiThread
+                result.fold(
+                    onSuccess = {
+                        panel().title("Respaldo guardado")
+                            .message(
+                                "Archivo: ${it.appFile.name}\nCarpeta de la aplicación: Android/data/$packageName/files/backup/" +
+                                    (it.publicLocation?.let { path -> "\nCopia compartida: $path" } ?: ""),
+                            )
+                            .noNegative().positive("Entendido").show()
+                    },
+                    onFailure = { toast(it.message ?: "No se pudo exportar.", long = true) },
+                )
+            }
+        }
+    }
+
+    private fun importFromOwnFolder() {
+        val files = backupManager.availableBackups()
+        if (files.isEmpty()) {
+            toast("No hay respaldos guardados por esta aplicación.", long = true)
+            return
+        }
+        val builder = panel().title("Elegir respaldo")
+        files.take(8).forEach { file ->
+            builder.item(file.name, SimpleDateFormat("d/M/yyyy HH:mm", Locale.getDefault()).format(Date(file.lastModified()))) {
+                confirmImport { backupManager.import(file) }
+            }
+        }
+        builder.show()
+    }
+
+    private fun pickBackupFile() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        try {
+            startActivityForResult(intent, REQUEST_IMPORT)
+        } catch (error: ActivityNotFoundException) {
+            toast("No hay un selector de archivos disponible en este dispositivo.", long = true)
+        }
+    }
+
+    private fun confirmImport(restore: () -> Int) {
+        panel()
+            .title("¿Importar preferencias?")
+            .message("Reemplaza tus favoritos, categorías, orden y ajustes actuales por los del respaldo.")
+            .positive("Importar") {
+                runOnWorker {
+                    val result = try {
+                        Result.success(restore())
+                    } catch (error: IOException) {
+                        Result.failure(error)
+                    }
+                    runOnUiThread {
+                        if (destroyed) return@runOnUiThread
+                        result.fold(
+                            onSuccess = { count ->
+                                dimView.alpha = preferences.wallpaperDim() / 100f
+                                wallpaperBitmap = null
+                                loadWallpaperIfNeeded()
+                                currentFilter = FILTER_ALL
+                                refreshContent(FOCUS_FIRST_CARD)
+                                toast("Preferencias importadas ($count elementos).", long = true)
+                            },
+                            onFailure = { toast(it.message ?: "No se pudo importar.", long = true) },
+                        )
+                    }
+                }
+            }
+            .negative("Cancelar")
+            .show()
+    }
+
+    // ---- updates and about
+
+    private fun showUpdateCenter() {
+        panel()
+            .title("Centro de actualizaciones")
+            .message(
+                "Versión instalada: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n\n" +
+                    "Solo se aceptan versiones publicadas oficialmente y firmadas con la clave del proyecto. " +
+                    "Android te pedirá confirmar cada instalación. Nada se descarga sin que lo pidas aquí.",
+            )
+            .positive("Buscar actualización") { checkForUpdates() }
+            .negative("Volver") { showSettings() }
             .show()
     }
 
     private fun checkForUpdates() {
-        Toast.makeText(this, "Buscando una versión publicada…", Toast.LENGTH_SHORT).show()
+        toast("Buscando una versión publicada…")
         UpdateManager.checkLatest(this) { result ->
             runOnUiThread {
                 if (destroyed) return@runOnUiThread
                 result.fold(
                     onSuccess = ::onReleaseFound,
                     onFailure = { error ->
-                        Toast.makeText(this, error.message ?: "No se pudo comprobar la actualización.", Toast.LENGTH_LONG).show()
+                        panel().title("Actualizaciones")
+                            .message(error.message ?: "No se pudo comprobar la actualización.")
+                            .noNegative().positive("Entendido") { showUpdateCenter() }.show()
                     },
                 )
             }
@@ -865,28 +1209,30 @@ class LauncherActivity : Activity() {
         val decision = try {
             UpdatePolicy.decide(release, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong())
         } catch (error: IOException) {
-            Toast.makeText(this, error.message, Toast.LENGTH_LONG).show()
+            toast(error.message ?: "Actualización rechazada.", long = true)
             return
         }
         if (decision == UpdateDecision.UP_TO_DATE) {
-            Toast.makeText(this, "NOBLEX LAUNCHER está actualizado.", Toast.LENGTH_LONG).show()
+            panel().title("Actualizaciones").message("NOBLEX LAUNCHER está actualizado.")
+                .noNegative().positive("Entendido").show()
             return
         }
-        dialog()
-            .setTitle("Actualización ${release.versionName}")
-            .setMessage(release.releaseNotes.ifBlank { "Hay una nueva versión disponible." })
-            .setPositiveButton("Descargar e instalar") { _, _ -> startUpdate(release) }
-            .setNegativeButton("Más tarde", null)
+        panel()
+            .title("Actualización ${release.versionName}")
+            .message(release.releaseNotes.ifBlank { "Hay una nueva versión disponible." })
+            .positive("Descargar e instalar") { startUpdate(release) }
+            .negative("Más tarde")
             .show()
     }
 
     private fun startUpdate(release: LauncherRelease) {
         val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
-        val progressDialog = dialog()
-            .setTitle("Descargando actualización")
-            .setMessage("Se verifica el archivo antes de abrir el instalador de Android. Android te pedirá confirmar.")
-            .setView(progressBar)
-            .setCancelable(false)
+        val progressDialog = panel()
+            .title("Descargando actualización")
+            .message("Se verifica el archivo antes de abrir el instalador de Android. Android te pedirá confirmar.")
+            .view(progressBar)
+            .noNegative()
+            .cancelable(false)
             .create()
         progressDialog.show()
         UpdateManager.downloadAndInstall(
@@ -901,35 +1247,67 @@ class LauncherActivity : Activity() {
             callback = { installResult ->
                 runOnUiThread {
                     if (progressDialog.isShowing) progressDialog.dismiss()
-                    installResult.exceptionOrNull()?.let {
-                        Toast.makeText(this, it.message ?: "No se pudo iniciar la actualización.", Toast.LENGTH_LONG).show()
-                    }
+                    installResult.exceptionOrNull()?.let { toast(it.message ?: "No se pudo iniciar la actualización.", long = true) }
                 }
             },
         )
     }
 
     private fun showAbout() {
-        dialog()
-            .setTitle("NOBLEX LAUNCHER")
-            .setMessage(
+        panel()
+            .title("NOBLEX LAUNCHER")
+            .message(
                 "Versión ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n" +
-                    "Android mínimo: API 28\n" +
-                    "Proyecto independiente; no está afiliado a Noblex, Changhong, Google ni Android TV.",
+                    "Paquete: $packageName\n" +
+                    "Android mínimo: API 28\n\n" +
+                    "Candidata a versión. Proyecto independiente; no está afiliado a Noblex, Changhong, Google ni Android TV. " +
+                    "Sin anuncios, sin recomendaciones, sin rastreo.",
             )
-            .setPositiveButton("Cerrar", null)
+            .noNegative().positive("Cerrar")
             .show()
     }
 
     private fun showRestoreInstructions() {
-        dialog()
-            .setTitle("Volver al launcher original")
-            .setMessage(
-                "Abre Ajustes de Android → Aplicaciones → Aplicaciones predeterminadas → Aplicación de inicio " +
-                    "y selecciona Google TV. NOBLEX LAUNCHER no elimina ni desactiva el launcher original.",
+        panel()
+            .title("Volver al launcher original")
+            .message(
+                "NOBLEX LAUNCHER no elimina ni desactiva Google TV. Para que el inicio vuelva a ser Google TV: " +
+                    "abre «Ajustes de inicio» y elige Google TV (si tu televisor no lo permite, Ajustes de Android → " +
+                    "Aplicaciones → Ver todas → NOBLEX LAUNCHER → Borrar valores predeterminados). " +
+                    "Desde un computador también puedes ejecutar scripts/restore_google_home.sh.",
             )
-            .setPositiveButton("Entendido", null)
+            .positive("Abrir ajustes de inicio") {
+                if (!SystemShortcuts.openHomeSettings(this) && !SystemShortcuts.openSettings(this)) {
+                    toast("No se pudieron abrir los ajustes de Android.", long = true)
+                }
+            }
+            .negative("Cerrar")
             .show()
+    }
+
+    // ---- tools
+
+    private class Tool(val id: String, val title: String, val subtitle: String, val icon: Int, val action: () -> Unit)
+
+    private fun tools(): List<Tool> {
+        val network = ConnectivityStatus.network(this)
+        return listOf(
+            Tool("wifi", "Wi-Fi", ConnectivityStatus.wifiText(network), R.drawable.ic_wifi, ::showWifi),
+            Tool("bluetooth", "Bluetooth", ConnectivityStatus.bluetoothText(ConnectivityStatus.bluetooth()), R.drawable.ic_bluetooth, ::showBluetooth),
+            Tool("tv", "TV en vivo", "Aplicación de TV", R.drawable.ic_tv, ::openTelevisionApp),
+            Tool("inputs", "Entradas HDMI", "Fuentes de video", R.drawable.ic_input) {
+                currentFilter = FILTER_INPUTS
+                refreshContent("$TAG_CHIP$FILTER_INPUTS")
+            },
+            Tool("settings", "Ajustes Android", "Sistema del televisor", R.drawable.ic_settings) {
+                if (!SystemShortcuts.openSettings(this)) toast("No se pudieron abrir los ajustes de Android.", long = true)
+            },
+            Tool("installed", "Aplicaciones", "Administrar instaladas", R.drawable.ic_apps) {
+                if (!SystemShortcuts.openInstalledApps(this)) toast("No se pudo abrir la lista de aplicaciones.", long = true)
+            },
+            Tool("update", "Actualizaciones", "Versión ${BuildConfig.VERSION_NAME}", R.drawable.ic_update, ::showUpdateCenter),
+            Tool("about", "Acerca de", "NOBLEX LAUNCHER", R.drawable.ic_info, ::showAbout),
+        )
     }
 
     private fun launchApp(app: LaunchableApp) {
@@ -965,6 +1343,7 @@ class LauncherActivity : Activity() {
     private fun message(value: String): View =
         text(value, 20f, Color.WHITE).apply {
             setPadding(0, dp(34), 0, dp(34))
+            minimumHeight = dp(176)
             setShadowLayer(6f, 0f, 1f, Color.BLACK)
         }
 
@@ -1008,11 +1387,17 @@ class LauncherActivity : Activity() {
         private const val FILTER_FAVORITES = "Favoritos"
         private const val FILTER_ALL = "Todas"
         private const val FILTER_INPUTS = "Entradas"
+        private const val FILTER_TOOLS = "Herramientas"
         private const val FILTER_RECENT = "Recientes"
         private const val TAG_APP = "app:"
         private const val TAG_CHIP = "chip:"
         private const val TAG_INPUT = "input:"
+        private const val TAG_TOOL = "tool:"
+        private const val TAG_WIFI = "pill:wifi"
+        private const val TAG_BLUETOOTH = "pill:bluetooth"
         private const val TAG_SETTINGS = "settings"
+        private const val STATUS_DEBOUNCE_MS = 400L
+        private const val REQUEST_IMPORT = 1202
         private const val FOCUS_FIRST_CARD = "first-card"
         private const val CLOCK_UPDATE_MS = 60_000L
         private const val PACKAGE_CHANGE_DEBOUNCE_MS = 700L
@@ -1021,8 +1406,8 @@ class LauncherActivity : Activity() {
         private const val MAX_WALLPAPER_HEIGHT = 1080
         private const val WALLPAPER_QUALITY = 88
         private const val CARD_WIDTH_DP = 212
-        private const val CARD_HEIGHT_DP = 160
+        private const val CARD_HEIGHT_DP = 176
         private const val CARD_GAP_DP = 14
-        private const val ARTWORK_HEIGHT_DP = 104
+        private const val ARTWORK_HEIGHT_DP = 108
     }
 }

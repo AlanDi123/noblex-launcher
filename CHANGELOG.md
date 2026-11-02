@@ -2,6 +2,8 @@
 
 ## 0.2.0-rc.1 — Candidato de release (no publicado)
 
+- Fase 3: diálogos propios, píldoras Wi-Fi/Bluetooth con estado real, sección Herramientas, gestor de categorías, exportar/importar preferencias, `scripts/tv_home.sh`, categorías por defecto actualizadas.
+
 - HOME persistente: el contenido ya no se reconstruye en cada `onResume`; el foco se conserva.
 - Descubrimiento de apps en segundo plano, con recarga al instalar/desinstalar paquetes; incluye actividades leanback sin categoría DEFAULT y banners.
 - Reloj alineado al minuto y activo solo con la pantalla visible; fondo decodificado fuera del hilo principal y liberado con `onTrimMemory`.
