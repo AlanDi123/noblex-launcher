@@ -13,9 +13,8 @@
 ## Proyecto y distribución
 
 - No existían código fuente ni repositorio local en `NoblexProject`; esa carpeta contiene el respaldo del TV.
-- El nombre `AlanDi123/noblex-launcher` no resolvía a un repositorio existente durante la auditoría.
+- `https://github.com/AlanDi123/noblex-launcher` se creó como repositorio público y el código fuente se publicó en `main`.
 - El nuevo proyecto vive en `~/noblex-launcher`. El respaldo propietario permanece separado.
-- El proyecto local tiene el workflow de release, pero la última consulta de disponibilidad falló por falta de conexión a `api.github.com`; no se creó ni se publicó el repositorio remoto.
 - No se ha configurado una clave de firma ni secretos de GitHub Actions. Un release estable queda bloqueado hasta la preparación y respaldo seguro de esa identidad.
 
 ## Dispositivo

@@ -6,7 +6,7 @@ Launcher Android TV independiente, sin publicidad ni recomendaciones patrocinada
 
 ## Estado
 
-Versión inicial de desarrollo (`0.1.0`). El APK de depuración se compiló e instaló en el TV para validar la interfaz, el foco DPAD, el menú contextual y la apertura de aplicaciones. Sigue siendo una prueba: Google TV permanece como HOME predeterminado y no existe una publicación de actualización hasta que se cree el repositorio remoto y se configure una clave de release protegida.
+Versión inicial de desarrollo (`0.1.0`). El código fuente está publicado en [GitHub](https://github.com/AlanDi123/noblex-launcher). El APK de depuración se compiló e instaló en el TV para validar la interfaz, el foco DPAD, el menú contextual y la apertura de aplicaciones. Google TV permanece como HOME predeterminado; no hay un release firmado hasta que se configure y respalde una clave de release permanente.
 
 ## Funciones
 
