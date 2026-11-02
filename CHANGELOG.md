@@ -4,6 +4,7 @@
 
 - Fase 3: diálogos propios, píldoras Wi-Fi/Bluetooth con estado real, sección Herramientas, gestor de categorías, exportar/importar preferencias, `scripts/tv_home.sh`, categorías por defecto actualizadas.
 
+- Fase 4: filtro HOME separado del de LEANBACK (`activity-alias LeanbackEntry`) y ajuste «Establecer como launcher predeterminado» con `RoleManager`. Causa de que INICIO no abra NOBLEX: ver PHASE4_HOME_REPORT.md.
 - HOME persistente: el contenido ya no se reconstruye en cada `onResume`; el foco se conserva.
 - Descubrimiento de apps en segundo plano, con recarga al instalar/desinstalar paquetes; incluye actividades leanback sin categoría DEFAULT y banners.
 - Reloj alineado al minuto y activo solo con la pantalla visible; fondo decodificado fuera del hilo principal y liberado con `onTrimMemory`.

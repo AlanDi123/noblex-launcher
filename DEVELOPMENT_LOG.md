@@ -37,3 +37,9 @@ Pendiente:
 - El script de rollback confirma `com.google.android.tvlauncher` habilitado y como HOME actual.
 - No existe clave privada de release ni respaldo externo verificado. No crear un release estable ni instalar el package de producción hasta resolverlo.
 - La primera ejecución de CI falló durante la configuración del SDK porque Android setup v3 intentó instalar el paquete obsoleto `tools`. Tras actualizar ambos workflows a v4.0.4, las dos ejecuciones posteriores completaron correctamente las pruebas, lint, build y carga del APK de depuración.
+
+## Fase 4 — registro HOME
+
+- Auditados manifiestos fuente/fusionado/instalado: NOBLEX es candidato HOME válido. Causa raíz: la prioridad 2 de Google TV gana en `chooseBestActivity` y las apps no privilegiadas quedan limitadas a prioridad 0 (PHASE4_HOME_REPORT.md).
+- Manifiesto dividido, `HomeRole` + ajuste de rol oficial probados en el TV (rol concedido, INICIO sigue abriendo Google TV). Restaurado a Google TV con `tv_home.sh restore-google`.
+- Reinicio no probado.

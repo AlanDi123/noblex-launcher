@@ -212,6 +212,19 @@ class LauncherActivity : Activity() {
     @Deprecated("Deprecated in Android API; retained for API 28 compatibility.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_HOME_ROLE) {
+            val held = HomeRole.state(this) == HomeRole.State.HELD
+            toast(
+                if (held) {
+                    "Rol asignado. Si INICIO sigue abriendo Google TV, es una regla de Android: " +
+                        "su prioridad de sistema (2) gana a cualquier launcher instalado."
+                } else {
+                    "El rol de inicio no cambió."
+                },
+                long = true,
+            )
+            return
+        }
         if (resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         if (requestCode == REQUEST_IMPORT) {
@@ -987,8 +1000,37 @@ class LauncherActivity : Activity() {
             .item("Respaldo y migración", "Exportar o importar tus preferencias") { showBackup() }
             .item("Centro de actualizaciones", "Versión ${BuildConfig.VERSION_NAME}") { showUpdateCenter() }
             .item("Acerca de NOBLEX LAUNCHER") { showAbout() }
+            .item("Establecer como launcher predeterminado", homeRoleSubtitle()) { requestHomeRole() }
             .item("Volver al launcher original", "Cómo restaurar Google TV como inicio") { showRestoreInstructions() }
             .show()
+    }
+
+    private fun homeRoleSubtitle(): String = when (HomeRole.state(this)) {
+        HomeRole.State.HELD -> "NOBLEX ya es el launcher predeterminado"
+        HomeRole.State.AVAILABLE -> "Solicita el cambio a Android"
+        HomeRole.State.UNSUPPORTED -> "Este televisor no ofrece esta opción"
+    }
+
+    private fun requestHomeRole() {
+        val state = HomeRole.state(this)
+        val intent = HomeRole.requestIntent(this)
+        if (intent == null) {
+            val text = if (state == HomeRole.State.HELD) {
+                "NOBLEX LAUNCHER ya tiene el rol de inicio."
+            } else {
+                "El firmware de este televisor no ofrece el rol de inicio de Android, por lo que el cambio no puede " +
+                    "solicitarse desde la aplicación. Google TV sigue siendo el inicio."
+            }
+            panel().title("Launcher predeterminado").message(text).noNegative().positive("Cerrar").show()
+            return
+        }
+        try {
+            startActivityForResult(intent, REQUEST_HOME_ROLE)
+        } catch (error: ActivityNotFoundException) {
+            panel().title("Launcher predeterminado")
+                .message("Android no incluye la pantalla de solicitud de rol en este televisor. Google TV sigue siendo el inicio.")
+                .noNegative().positive("Cerrar").show()
+        }
     }
 
     private fun showWallpaperSettings() {
@@ -1398,6 +1440,7 @@ class LauncherActivity : Activity() {
         private const val TAG_SETTINGS = "settings"
         private const val STATUS_DEBOUNCE_MS = 400L
         private const val REQUEST_IMPORT = 1202
+        private const val REQUEST_HOME_ROLE = 1203
         private const val FOCUS_FIRST_CARD = "first-card"
         private const val CLOCK_UPDATE_MS = 60_000L
         private const val PACKAGE_CHANGE_DEBOUNCE_MS = 700L

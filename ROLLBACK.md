@@ -18,3 +18,7 @@ No uses scripts que borren paquetes o datos. El script de comprobación de rollb
 ## Verificación
 
 `scripts/check_rollback.sh` (solo lectura) confirma que Google TV sigue instalado, habilitado y como HOME. Si el launcher falla, HOME siempre puede volver a Google TV con el selector del sistema; desinstalar NOBLEX LAUNCHER (`adb uninstall io.github.alandi123.noblexlauncher`) no afecta a las apps del sistema. Tras desinstalar se pierden sus preferencias (favoritos, categorías, fondo).
+
+## Tras solicitar el rol HOME (Fase 4)
+
+Si concedes el rol desde Ajustes, restaura con `ANDROID_SERIAL=<ip:puerto> scripts/tv_home.sh restore-google` (restablece el rol y la preferencia a Google TV).

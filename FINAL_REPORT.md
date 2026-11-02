@@ -44,3 +44,7 @@ Detalles: `SYSTEM_AUDIT.md`, `APPLICATION_INVENTORY.md`, `REMOTE_CONTROL_TESTS.m
 3. Crear un tag pre-release `v0.2.x-rc.N` y ejecutar el plan de `UPDATES.md`.
 4. Confirmar visualmente el cambio HDMI.
 5. Decidir cuándo establecer NOBLEX LAUNCHER como HOME (no se ha cambiado; Google TV intacto).
+
+## Fase 4
+
+NOBLEX no puede ser el HOME predeterminado en este firmware sin privilegios de sistema; Google TV sigue siendo el inicio. Detalle y evidencia: PHASE4_HOME_REPORT.md.
