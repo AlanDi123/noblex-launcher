@@ -15,7 +15,7 @@
 - APK verificado como `io.github.alandi123.noblexlauncher.debug`, min SDK 28 y target SDK 30.
 - Instalado y abierto en Android TV 11/API 30. La captura confirma 1920×1080; se probaron el foco DPAD, menú contextual y apertura de una aplicación descubierta.
 - `scripts/check_rollback.sh` confirmó que Google TV permanece habilitado y es el HOME actual.
-- El primer CI falló en la configuración del SDK porque Android setup v3 intentó instalar un paquete obsoleto. Ambos workflows se actualizaron a v4.0.4; la ejecución de confirmación está en curso.
+- El primer CI falló en la configuración del SDK porque Android setup v3 intentó instalar un paquete obsoleto. Tras actualizar ambos workflows a v4.0.4, las dos ejecuciones posteriores completaron correctamente pruebas, lint, build y carga del APK de depuración.
 
 ## Pendiente antes de publicar o activar
 

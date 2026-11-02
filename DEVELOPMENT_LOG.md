@@ -22,4 +22,4 @@
 - Instalado y abierto en el TV sin cambiar HOME. Se comprobó la interfaz 1920×1080, foco DPAD, menú contextual y apertura de una app descubierta.
 - El script de rollback confirma `com.google.android.tvlauncher` habilitado y como HOME actual.
 - No existe clave privada de release ni respaldo externo verificado. No crear un release estable ni instalar el package de producción hasta resolverlo.
-- La primera ejecución de CI falló durante la configuración del SDK porque Android setup v3 intentó instalar el paquete obsoleto `tools`. Se actualizó ambos workflows a v4.0.4; la ejecución posterior está pendiente.
+- La primera ejecución de CI falló durante la configuración del SDK porque Android setup v3 intentó instalar el paquete obsoleto `tools`. Tras actualizar ambos workflows a v4.0.4, las dos ejecuciones posteriores completaron correctamente las pruebas, lint, build y carga del APK de depuración.
