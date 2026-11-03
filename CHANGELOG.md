@@ -22,3 +22,5 @@
 - Pantalla HOME en Kotlin con navegación de control remoto.
 - Descubrimiento de apps, favoritos, categorías, orden y visibilidad.
 - Consulta de entradas TV y flujo inicial de actualización.
+
+- Fase 5: pantalla de bienvenida (primera ejecución, descartable de forma permanente) y «Ajustes → Ayuda» que explican que en este televisor INICIO sigue abriendo Google TV; el ajuste de rol ya no promete que INICIO abrirá NOBLEX; «Brillo del fondo» aclara que solo oscurece el fondo del launcher, no el brillo del televisor; se quitó la pista «INICIO: volver aquí» por engañosa.

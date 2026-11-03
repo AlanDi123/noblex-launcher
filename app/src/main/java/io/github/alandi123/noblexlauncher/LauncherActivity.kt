@@ -112,6 +112,9 @@ class LauncherActivity : Activity() {
         setContentView(buildShell())
         refreshContent(FOCUS_FIRST_CARD)
         UpdateScheduler.schedule(this)
+        if (savedInstanceState == null && !preferences.introSeen()) {
+            mainHandler.post { if (!isFinishing && !isDestroyed) showIntro() }
+        }
     }
 
     override fun onStart() {
@@ -421,7 +424,7 @@ class LauncherActivity : Activity() {
             else -> contentHost.addView(buildAppRow())
         }
         contentHost.addView(
-            text("MENU: organizar  ·  ATRÁS: volver a Todas  ·  INICIO: volver aquí", 15f, Color.rgb(205, 218, 215)),
+            text("MENU: organizar  ·  ATRÁS: volver a Todas  ·  Ajustes → Ayuda", 15f, Color.rgb(205, 218, 215)),
             marginTop = dp(10),
         )
         updateClock()
@@ -994,11 +997,12 @@ class LauncherActivity : Activity() {
     private fun showSettings() {
         panel()
             .title("Ajustes")
-            .item("Fondo y brillo", "Imagen del paisaje y legibilidad") { showWallpaperSettings() }
+            .item("Fondo y brillo", "Imagen y oscurecimiento del fondo (no el brillo del televisor)") { showWallpaperSettings() }
             .item("Categorías", "Crear, renombrar, ordenar y eliminar") { manageCategories() }
             .item("Aplicaciones ocultas", "Mostrar de nuevo lo que ocultaste") { manageHiddenApps() }
             .item("Respaldo y migración", "Exportar o importar tus preferencias") { showBackup() }
             .item("Centro de actualizaciones", "Versión ${BuildConfig.VERSION_NAME}") { showUpdateCenter() }
+            .item("Ayuda", "Cómo abrir NOBLEX, volver a Google TV y recuperarte de un problema") { showHelp() }
             .item("Acerca de NOBLEX LAUNCHER") { showAbout() }
             .item("Establecer como launcher predeterminado", homeRoleSubtitle()) { requestHomeRole() }
             .item("Volver al launcher original", "Cómo restaurar Google TV como inicio") { showRestoreInstructions() }
@@ -1007,7 +1011,7 @@ class LauncherActivity : Activity() {
 
     private fun homeRoleSubtitle(): String = when (HomeRole.state(this)) {
         HomeRole.State.HELD -> "NOBLEX ya es el launcher predeterminado"
-        HomeRole.State.AVAILABLE -> "Solicita el cambio a Android"
+        HomeRole.State.AVAILABLE -> "Opcional: Android puede ignorarlo según el firmware"
         HomeRole.State.UNSUPPORTED -> "Este televisor no ofrece esta opción"
     }
 
@@ -1089,7 +1093,7 @@ class LauncherActivity : Activity() {
         }
         panel()
             .title("Brillo del fondo")
-            .message("Usa ◀ ▶ para ajustar la legibilidad del texto sobre el paisaje. Menos oscurecimiento = fondo más luminoso.")
+            .message("Solo oscurece la imagen de fondo del launcher para leer mejor; no cambia el brillo del televisor. Usa ◀ ▶ para ajustar.")
             .view(content)
             .positive("Listo") { preferences.setWallpaperDim(slider.progress); showWallpaperSettings() }
             .negative("Cancelar") { showWallpaperSettings() }
@@ -1293,6 +1297,35 @@ class LauncherActivity : Activity() {
                 }
             },
         )
+    }
+
+    private fun showIntro() {
+        panel()
+            .title("Bienvenido a NOBLEX LAUNCHER")
+            .message(
+                "En algunos televisores, como este Noblex, el botón INICIO puede seguir abriendo Google TV: " +
+                    "el firmware le da prioridad y NOBLEX no puede cambiarlo.\n\n" +
+                    "Para abrir NOBLEX: en Google TV ve a Aplicaciones y elige NOBLEX LAUNCHER " +
+                    "(si tu menú lo permite, agrégalo a favoritos o fíjalo). Puedes releer esto en Ajustes → Ayuda.",
+            )
+            .positive("Entendido") { preferences.setIntroSeen(true) }
+            .negative("Recordármelo luego")
+            .show()
+    }
+
+    private fun showHelp() {
+        panel()
+            .title("Ayuda")
+            .message(
+                "• Abrir NOBLEX: desde Google TV, Aplicaciones → NOBLEX LAUNCHER. El botón INICIO puede abrir Google TV en este televisor.\n" +
+                    "• Volver a Google TV: pulsa INICIO, o usa «Volver al launcher original» en Ajustes.\n" +
+                    "• Ver todas las aplicaciones: categoría «Todas» o Herramientas → Aplicaciones instaladas.\n" +
+                    "• Si algo falla: Ajustes de Android → Aplicaciones → NOBLEX LAUNCHER → Forzar detención; " +
+                    "tus datos se conservan. Para restaurar el inicio original desde un computador: scripts/tv_home.sh restore-google.",
+            )
+            .positive("Ver bienvenida") { showIntro() }
+            .negative("Cerrar")
+            .show()
     }
 
     private fun showAbout() {

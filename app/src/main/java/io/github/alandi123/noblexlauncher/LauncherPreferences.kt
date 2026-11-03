@@ -124,6 +124,12 @@ class LauncherPreferences(context: Context) {
         preferences.edit().putInt(KEY_WALLPAPER_DIM, value.coerceIn(0, MAX_DIM)).apply()
     }
 
+    fun introSeen(): Boolean = preferences.getBoolean(KEY_INTRO_SEEN, false)
+
+    fun setIntroSeen(seen: Boolean) {
+        preferences.edit().putBoolean(KEY_INTRO_SEEN, seen).apply()
+    }
+
     fun wallpaperUri(): String? = preferences.getString(KEY_WALLPAPER_URI, null)
 
     fun setWallpaperUri(uri: String?) {
@@ -176,6 +182,7 @@ class LauncherPreferences(context: Context) {
         )
         const val DEFAULT_DIM = 10
         const val MAX_DIM = 70
+        private const val KEY_INTRO_SEEN = "intro_seen"
         private const val KEY_FAVORITES = "favorites"
         private const val KEY_CATEGORY_PREFIX = "category."
         private const val KEY_HIDDEN = "hidden"

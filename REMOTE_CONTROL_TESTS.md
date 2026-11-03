@@ -38,3 +38,22 @@ Input method: `adb shell input keyevent` (equivalent to the remote's key codes) 
 | Volume / power | Not intercepted | No handler registered | OK |
 
 Fixes found during these tests: chips had no horizontal padding; empty-category state made the layout jump; the category-name dialog could not be saved with the keyboard (now saves on IME Done / ENTER and DPAD_DOWN from the field reaches the buttons).
+
+
+## Listas de verificación manual (pendientes: requieren el mando real)
+
+Las pruebas anteriores usaron eventos de teclado por ADB; **no prueban el mando físico**.
+
+### Mando
+- [ ] Flechas mueven el foco en cabecera, categorías y tarjetas, sin trampas de foco.
+- [ ] OK abre una app / acciona un botón; MENÚ abre «organizar».
+- [ ] ATRÁS cierra diálogos y vuelve a «Todas».
+- [ ] INICIO (en este Noblex abre Google TV; confirmar y abrir NOBLEX desde Aplicaciones).
+- [ ] Volumen y encendido funcionan con normalidad dentro del launcher.
+- [ ] Botones dedicados de apps (Netflix, etc.) siguen funcionando.
+- [ ] La bienvenida aparece una vez y se puede releer en Ajustes → Ayuda.
+
+### HDMI
+- [ ] Conecta una fuente HDMI y confirma que aparece en el selector nativo del TV.
+- [ ] En Herramientas → Entradas, elige esa entrada y comprueba que se ve la señal.
+- [ ] Vuelve a NOBLEX (Google TV → Aplicaciones → NOBLEX) y anota cualquier limitación.

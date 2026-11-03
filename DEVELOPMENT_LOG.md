@@ -43,3 +43,11 @@ Pendiente:
 - Auditados manifiestos fuente/fusionado/instalado: NOBLEX es candidato HOME válido. Causa raíz: la prioridad 2 de Google TV gana en `chooseBestActivity` y las apps no privilegiadas quedan limitadas a prioridad 0 (PHASE4_HOME_REPORT.md).
 - Manifiesto dividido, `HomeRole` + ajuste de rol oficial probados en el TV (rol concedido, INICIO sigue abriendo Google TV). Restaurado a Google TV con `tv_home.sh restore-google`.
 - Reinicio no probado.
+
+## Fase 5 — estabilización
+
+- Repositorio limpio en `17ed3fa`, CI verde. Auditoría del updater por lectura: semver, versionCode creciente, applicationId, tamaño, SHA-256, URL oficial, `.part`, paquete/versionCode/certificado del APK y confirmación del usuario ya presentes (pruebas unitarias existentes).
+- Brillo: es un overlay del fondo (alpha de `dimView`); no toca el brillo de hardware. Renombrado/explicado en la interfaz.
+- Añadidos `LauncherPreferences.introSeen` (no incluido en respaldos ni borrado por «importar»), `showIntro()` y `showHelp()`. Probado en el TV por ADB: la bienvenida aparece, se descarta con DPAD_CENTER, `intro_seen=true` persiste tras `force-stop`.
+- Memoria tras los cambios: ≈40 MB PSS (≈71 MB RSS) con el launcher en primer plano. Sin `FATAL`/`ANR` en logcat.
+- No se probó: mando físico, HDMI con fuente real, reinicio, cambio de red. Ver RELEASE_READINESS.md.

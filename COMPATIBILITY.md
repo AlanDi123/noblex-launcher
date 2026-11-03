@@ -10,7 +10,7 @@
 
 - Instalación, arranque, foco DPAD, apertura de una app y regreso con HOME.
 - Fondo persistente tras `force-stop`; Google TV sigue siendo HOME (`scripts/check_rollback.sh`).
-- Memoria: ≈80 MB de PSS en el proceso del launcher con el fondo cargado.
+- Memoria: ≈40–63 MB de PSS (Fase 5 ≈40 MB; antes ≈80 MB) en el proceso del launcher con el fondo cargado.
 
 ## Entradas de TV y cambio de HDMI
 
@@ -25,3 +25,11 @@ Investigación de solo lectura (sin modificar paquetes):
 ## Limitaciones
 
 Otros dispositivos Android TV, Google TV, resoluciones y ABI son objetivos no certificados hasta probarlos. El comportamiento del selector HOME depende del fabricante; el launcher no se ha establecido como HOME.
+
+## Portabilidad (Fase 5)
+
+- Núcleo genérico (cualquier Android TV API 28+): descubrimiento de apps, favoritos, categorías, fondo, respaldo, atajos de Ajustes, `RoleManager`, actualizaciones por GitHub. Sin dependencias de Google TV ni de servicios Noblex; APK sin código nativo (independiente de ABI).
+- Específico del fabricante/plataforma: solo el cambio de entradas usa `TvContract` público y la app `com.mediatek.wwtv.tvcenter` si existe; si falta, se muestra un aviso.
+- Permisos: INTERNET, ACCESS_NETWORK_STATE, BLUETOOTH (≤API 30) y REQUEST_INSTALL_PACKAGES. No se pide ubicación: el SSID de Wi-Fi no se muestra, solo «conectado/con internet».
+- Degradación: sin selector de rol, sin pantalla de Bluetooth/Wi-Fi o sin selector de imágenes se muestra una explicación en lugar de fallar. El brillo del televisor no se controla (el ajuste solo oscurece el fondo).
+- No se afirma compatibilidad universal: solo está probado el Noblex AI PONT.

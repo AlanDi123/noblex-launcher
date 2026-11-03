@@ -60,3 +60,16 @@ Auditoría de todo el repositorio (Kotlin, recursos, manifiesto, Gradle, workflo
 4. Prueba de actualización real extremo a extremo (UPDATES.md).
 5. Confirmar visualmente el cambio HDMI.
 6. Decidir cuándo establecer HOME (no se ha cambiado).
+
+## Estado por fase (actualizado en la Fase 5)
+
+| Área | Estado |
+|------|--------|
+| Fases 1–2 (auditoría, updater, workflow) | PASS: pruebas unitarias, lint, build, CI verde |
+| Fase 3 (conectividad, herramientas, categorías, respaldo) | PASS por ADB en el TV; PARTIAL en mando físico |
+| Fase 4 (HOME) | PASS el registro y el rol; **FIRMWARE**: INICIO siempre abre Google TV (prioridad 2 vs. 0), sin solución sin instalación privilegiada |
+| Fase 5 (bienvenida/ayuda, honestidad de brillo y rol) | PASS por ADB (captura 1920×1080, persistencia tras `force-stop`) |
+| Mando físico (DPAD/OK/ATRÁS/INICIO/volumen) | PENDING: ver lista en REMOTE_CONTROL_TESTS.md |
+| HDMI con fuente real | PENDING |
+| Reinicio del TV | PENDING (no se probó para no perder el ADB inalámbrico) |
+| Clave permanente, secretos, update E2E | PENDING (bloquea el release estable) |
