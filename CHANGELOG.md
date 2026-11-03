@@ -2,6 +2,8 @@
 
 ## 0.2.0-rc.1 — Candidato de release (no publicado)
 
+- Fase 6: pruebas de aceptación por ADB (ver ACCEPTANCE_REPORT.md), `UpdateVerifier` (comprobaciones de hash, tamaño, certificado e identidad extraídas y probadas), nuevas pruebas unitarias, MANUAL_TV_CHECKLIST.md y lista de firma para el propietario en SIGNING.md.
+
 - Fase 3: diálogos propios, píldoras Wi-Fi/Bluetooth con estado real, sección Herramientas, gestor de categorías, exportar/importar preferencias, `scripts/tv_home.sh`, categorías por defecto actualizadas.
 
 - Fase 4: filtro HOME separado del de LEANBACK (`activity-alias LeanbackEntry`) y ajuste «Establecer como launcher predeterminado» con `RoleManager`. Causa de que INICIO no abra NOBLEX: ver PHASE4_HOME_REPORT.md.

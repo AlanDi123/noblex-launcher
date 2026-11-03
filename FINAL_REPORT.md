@@ -48,3 +48,7 @@ Detalles: `SYSTEM_AUDIT.md`, `APPLICATION_INVENTORY.md`, `REMOTE_CONTROL_TESTS.m
 ## Fase 4
 
 NOBLEX no puede ser el HOME predeterminado en este firmware sin privilegios de sistema; Google TV sigue siendo el inicio. Detalle y evidencia: PHASE4_HOME_REPORT.md.
+
+## Actualización Fase 6
+
+Resultados de aceptación en ACCEPTANCE_REPORT.md; bloqueos restantes para el release público: crear y respaldar la clave permanente, configurar secretos y variable, publicar una pre-release de prueba, ejecutar la lista manual del TV (MANUAL_TV_CHECKLIST.md) y la prueba de actualización real.

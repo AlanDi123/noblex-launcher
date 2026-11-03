@@ -51,3 +51,11 @@ Pendiente:
 - Añadidos `LauncherPreferences.introSeen` (no incluido en respaldos ni borrado por «importar»), `showIntro()` y `showHelp()`. Probado en el TV por ADB: la bienvenida aparece, se descarta con DPAD_CENTER, `intro_seen=true` persiste tras `force-stop`.
 - Memoria tras los cambios: ≈40 MB PSS (≈71 MB RSS) con el launcher en primer plano. Sin `FATAL`/`ANR` en logcat.
 - No se probó: mando físico, HDMI con fuente real, reinicio, cambio de red. Ver RELEASE_READINESS.md.
+
+## Fase 6 — aceptación y preparación de release
+
+- Copia de preferencias exportada fuera del repositorio; el estado original del usuario se restauró tras las pruebas (ida y vuelta de respaldo verificada).
+- Pruebas por ADB de inventario, lanzamiento de 23 apps, categorías, favoritos, ocultas, orden, persistencia, Wi-Fi y diálogos: ver ACCEPTANCE_REPORT.md.
+- Mediciones: PSS ≈70 MB, Private Dirty ≈41 MB, arranque en frío ≈2,0 s, 0 FATAL/ANR.
+- Actualizador: verificaciones extraídas a `UpdateVerifier` con pruebas unitarias.
+- No probado: mando físico, HDMI, reinicio, selector de fondo, refresco al instalar apps, Bluetooth. Sin clave permanente no hay prueba de actualización real.

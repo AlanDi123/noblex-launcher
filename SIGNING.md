@@ -62,3 +62,18 @@ Comprueba firma v2/v3 válida, huella fijada, `applicationId`, y que `versionCod
 ## 7. Claves de prueba
 
 Para probar `assembleRelease` o `apksigner` localmente se usa una clave **desechable** en un directorio temporal, que se elimina después. Nunca se reutiliza para publicar.
+
+## 8. Lista de comprobación del propietario (en este orden)
+
+- [ ] 1. Crear la clave en tu equipo con `keytool` (sección 1). La contraseña se escribe solo en el terminal, nunca en chats ni en comandos.
+- [ ] 2. Guardar contraseña, alias y huella en el gestor de contraseñas.
+- [ ] 3. Hacer dos copias cifradas del `.jks` y **probar la restauración** (sección 2).
+- [ ] 4. Obtener la huella SHA-256 (sección 3).
+- [ ] 5. Configurar los 4 secretos `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` y la variable `RELEASE_CERT_SHA256` (sección 4).
+- [ ] 6. Confirmar con `gh secret list` y `gh variable list` que los cinco nombres existen (no muestran valores).
+- [ ] 7. Publicar primero una **pre-release** (`vX.Y.Z-rc.N`): el workflow usa `--prerelease` si la etiqueta contiene `-`.
+- [ ] 8. Descargar el APK y ejecutar `scripts/verify_apk.sh` (sección 5).
+
+Reglas del workflow de release (revisadas en la Fase 6): permisos `contents: write` solo en ese workflow; el `versionCode` se deriva de la versión SemVer de la etiqueta (siempre creciente al subir la versión); el APK se llama `noblex-launcher-<versión>.apk`; el manifiesto `update-manifest.json` incluye applicationId, versión, versionCode, minSdk, ABIs, URL oficial, SHA-256 y tamaño; el workflow rechaza un APK cuya huella no coincida con `RELEASE_CERT_SHA256`.
+
+Qué falta hoy (bloqueado): la clave permanente, los secretos y la variable. Por eso la prueba de actualización real de extremo a extremo no se ha podido ejecutar. No instales sobre tu app un APK firmado con una clave de prueba: Android rechazaría la actualización o te obligaría a desinstalar.

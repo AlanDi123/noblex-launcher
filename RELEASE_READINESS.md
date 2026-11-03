@@ -73,3 +73,11 @@ Auditoría de todo el repositorio (Kotlin, recursos, manifiesto, Gradle, workflo
 | HDMI con fuente real | PENDING |
 | Reinicio del TV | PENDING (no se probó para no perder el ADB inalámbrico) |
 | Clave permanente, secretos, update E2E | PENDING (bloquea el release estable) |
+
+## Estado tras la Fase 6
+
+- Verificado por ADB: ver ACCEPTANCE_REPORT.md. Verificado físicamente: nada.
+- PENDING: mando físico, HDMI, reinicio, selector de fondo, refresco al instalar apps, Bluetooth.
+- BLOCKED: clave de firma permanente, secretos de GitHub, `RELEASE_CERT_SHA256`, primera pre-release y prueba de actualización real.
+- Limitación de firmware: INICIO abre Google TV.
+- No hay release publicada y no debe publicarse hasta cerrar lo anterior.

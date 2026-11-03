@@ -57,3 +57,7 @@ Las pruebas anteriores usaron eventos de teclado por ADB; **no prueban el mando 
 - [ ] Conecta una fuente HDMI y confirma que aparece en el selector nativo del TV.
 - [ ] En Herramientas → Entradas, elige esa entrada y comprueba que se ve la señal.
 - [ ] Vuelve a NOBLEX (Google TV → Aplicaciones → NOBLEX) y anota cualquier limitación.
+
+## Fase 6
+
+Resultados por ADB en ACCEPTANCE_REPORT.md. La lista para el mando físico, HDMI y reinicio (todo PENDING) está en MANUAL_TV_CHECKLIST.md. Las pruebas con `adb shell input` no demuestran compatibilidad con el mando físico.

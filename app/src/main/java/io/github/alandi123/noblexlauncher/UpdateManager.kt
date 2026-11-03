@@ -18,7 +18,6 @@ import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URL
 import java.net.UnknownHostException
-import java.security.MessageDigest
 import java.util.concurrent.Executors
 
 data class LauncherRelease(
@@ -134,9 +133,7 @@ object UpdateManager {
         var verified = false
         try {
             download(release, part, onProgress)
-            if (!sha256(part).equals(release.sha256, ignoreCase = true)) {
-                throw IOException("La verificación SHA-256 de la descarga falló.")
-            }
+            UpdateVerifier.requireChecksum(part, release.sha256)
             if (apk.exists() && !apk.delete()) throw IOException("No se pudo reemplazar el APK en caché.")
             if (!part.renameTo(apk)) throw IOException("No se pudo guardar el APK descargado.")
             verifyArchive(context, apk, release)
@@ -153,23 +150,18 @@ object UpdateManager {
         val packageManager = context.packageManager
         val archive = packageManager.getPackageArchiveInfo(apk.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES)
             ?: throw IOException("El APK descargado no es válido.")
-        if (archive.packageName != BuildConfig.APPLICATION_ID ||
-            archive.longVersionCode != release.versionCode ||
-            archive.versionName != release.versionName
-        ) {
-            throw IOException("La identidad o versión del APK no coincide con el manifiesto.")
-        }
+        UpdateVerifier.requireIdentity(
+            archive.packageName, archive.longVersionCode, archive.versionName, BuildConfig.APPLICATION_ID, release,
+        )
         val installed = packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-        if (signerDigests(installed).intersect(candidateSignerDigests(archive)).isEmpty()) {
-            throw IOException("El APK no está firmado con la misma clave que la versión instalada.")
-        }
+        UpdateVerifier.requireSameSigner(signerDigests(installed), candidateSignerDigests(archive))
     }
 
     private fun signerDigests(info: PackageInfo): Set<String> =
-        info.signingInfo?.apkContentsSigners.orEmpty().map { digest(it.toByteArray()) }.toSet()
+        info.signingInfo?.apkContentsSigners.orEmpty().map { UpdateVerifier.digest(it.toByteArray()) }.toSet()
 
     private fun candidateSignerDigests(info: PackageInfo): Set<String> =
-        info.signingInfo?.signingCertificateHistory.orEmpty().map { digest(it.toByteArray()) }.toSet()
+        info.signingInfo?.signingCertificateHistory.orEmpty().map { UpdateVerifier.digest(it.toByteArray()) }.toSet()
 
     private fun commitInstall(context: Context, apk: File) {
         val installer = context.packageManager.packageInstaller
@@ -228,9 +220,7 @@ object UpdateManager {
         connection.useConnection {
             if (responseCode !in 200..299) throw IOException("No se pudo descargar el APK (HTTP $responseCode).")
             val declared = contentLengthLong
-            if (declared > 0 && declared != release.sizeBytes) {
-                throw IOException("El tamaño de la descarga no coincide con el manifiesto.")
-            }
+            UpdateVerifier.requireDeclaredSize(declared, release.sizeBytes)
             inputStream.use { input ->
                 destination.outputStream().use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -240,7 +230,7 @@ object UpdateManager {
                         val read = input.read(buffer)
                         if (read < 0) break
                         downloaded += read
-                        if (downloaded > release.sizeBytes) throw IOException("La descarga supera el tamaño publicado.")
+                        UpdateVerifier.requireDownloadedSize(downloaded, release.sizeBytes)
                         output.write(buffer, 0, read)
                         val percent = ((downloaded * 100) / release.sizeBytes).toInt()
                         if (percent != lastPercent) {
@@ -248,7 +238,7 @@ object UpdateManager {
                             onProgress(percent)
                         }
                     }
-                    if (downloaded != release.sizeBytes) throw IOException("La descarga quedó incompleta.")
+                    UpdateVerifier.requireComplete(downloaded, release.sizeBytes)
                 }
             }
         }
@@ -292,22 +282,6 @@ object UpdateManager {
         }
         return out.toByteArray()
     }
-
-    private fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().buffered().use { input ->
-            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-            while (true) {
-                val count = input.read(buffer)
-                if (count < 0) break
-                digest.update(buffer, 0, count)
-            }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
-    }
-
-    private fun digest(bytes: ByteArray): String =
-        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     private inline fun <T> HttpURLConnection.useConnection(block: HttpURLConnection.() -> T): T =
         try {
